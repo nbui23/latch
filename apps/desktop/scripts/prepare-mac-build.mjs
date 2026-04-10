@@ -58,5 +58,6 @@ copyFileSync(
 )
 
 run('pnpm', ['build:chrome'], extensionRoot)
+run('node', [join(repoRoot, 'scripts', 'package-chrome-extension.mjs')], repoRoot)
 run('pnpm', ['build'], nmHostRoot)
 run('pnpm', ['run', 'pkg'], nmHostRoot)

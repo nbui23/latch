@@ -8,6 +8,21 @@ It blocks distracting sites with a privileged helper, keeps blocklists on-device
 
 Download the latest macOS build from the [GitHub Releases](../../releases) page.
 
+For the friendlier blocked-page experience, also download the `Latch-chrome-extension.zip` asset from the same release.
+
+## Chromium extension
+
+To load the extension in Chrome, Edge, or another Chromium browser:
+
+1. download `Latch-chrome-extension.zip` from [GitHub Releases](../../releases)
+2. unzip it
+3. open `chrome://extensions`
+4. enable **Developer mode**
+5. click **Load unpacked**
+6. select the extracted `chrome` folder
+
+If you already installed the desktop app, the packaged app bundle also includes the extension under `extensions/chrome`.
+
 ## Screenshots
 
 ![Latch focus page](docs/screenshots/desktop-focus.svg)
