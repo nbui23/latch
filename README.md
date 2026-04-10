@@ -6,7 +6,7 @@ It blocks distracting sites with a privileged helper, keeps blocklists on-device
 
 ## Download
 
-Download the latest macOS build from the [GitHub Releases](../../releases) page.
+Download the latest macOS build from the [GitHub Releases](../../releases) page then run: `xattr -cr /Applications/Latch.app`.
 
 For the friendlier blocked-page experience, also download the `Latch-chrome-extension.zip` asset from the same release.
 
