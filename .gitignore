@@ -1,0 +1,31 @@
+# dependencies
+node_modules/
+
+# build output
+apps/**/dist/
+apps/**/out/
+apps/desktop/dist-dmg-debug/
+apps/desktop/dist-dmg-test/
+apps/desktop/.tmp-bin/
+packages/**/dist/
+coverage/
+playwright-report/
+test-results/
+
+# local app/runtime state
+.omx/
+.omc/
+state/
+.claude/
+apps/helper-mac/.build/
+apps/helper-mac/.tmp-clang-module-cache/
+
+# misc
+.DS_Store
+*.log
+*.tmp
+*.swp
+
+# generated binaries
+apps/desktop/resources/helper-mac/latch-helper
+apps/desktop/resources/helper-mac/freeturkey-helper

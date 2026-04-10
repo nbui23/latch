@@ -1,0 +1,21 @@
+{
+  "name": "extension",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node --import tsx build.ts",
+    "build:chrome": "node --import tsx build.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@latch/shared": "workspace:*",
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.268",
+    "esbuild": "^0.21.0",
+    "tsx": "^4.11.0",
+    "typescript": "^5.4.0"
+  }
+}

@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Site Blocked — Latch</title>
+  <link rel="stylesheet" href="blocked.css" />
+</head>
+<body>
+  <div class="container">
+    <div class="icon" aria-hidden="true">
+      <svg width="64" height="64" viewBox="0 0 64 64" role="presentation" focusable="false">
+        <rect x="14" y="10" width="12" height="44" rx="6" fill="#f8fafc" />
+        <rect x="14" y="42" width="34" height="12" rx="6" fill="#f8fafc" />
+      </svg>
+    </div>
+    <h1>Site Blocked</h1>
+    <p class="domain" id="domain"></p>
+    <p class="message">
+      This site is blocked during your focus session.<br />
+      Stay on track — you're doing great.
+    </p>
+    <div class="timer-wrap" id="timer-wrap">
+      <span class="timer-label">Session ends in</span>
+      <span class="timer" id="timer">–</span>
+    </div>
+  </div>
+  <script src="blocked.js"></script>
+</body>
+</html>

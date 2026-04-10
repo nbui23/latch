@@ -1,0 +1,35 @@
+{
+  "name": "desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Latch macOS desktop app",
+  "author": "Latch Contributors",
+  "main": "dist/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "build:mac": "node ./scripts/prepare-mac-build.mjs && pnpm build && env TMPDIR=/tmp electron-builder --mac",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "preview": "electron-vite preview"
+  },
+  "dependencies": {
+    "@latch/shared": "workspace:*",
+    "electron-updater": "^6.1.0",
+    "lowdb": "^7.0.1",
+    "uuid": "^9.0.1",
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/uuid": "^9.0.8",
+    "@types/react": "^18.0.0",
+    "@types/react-dom": "^18.0.0",
+    "electron": "^29.0.0",
+    "electron-builder": "^24.9.0",
+    "electron-vite": "^2.1.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "typescript": "^5.4.0",
+    "vite": "^5.2.0"
+  }
+}

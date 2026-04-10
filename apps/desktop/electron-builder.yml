@@ -1,0 +1,47 @@
+appId: app.latch.desktop
+productName: Latch
+copyright: "Copyright © 2024 Latch Contributors"
+
+directories:
+  output: dist
+  buildResources: resources
+
+files:
+  - dist/main/**/*
+  - dist/renderer/**/*
+  - dist/preload/**/*
+  - package.json
+
+extraResources:
+  - from: resources/helper-mac
+    to: helper-mac
+    filter:
+      - "**/*"
+  - from: ../../apps/extension/dist/chrome
+    to: extensions/chrome
+# macOS
+mac:
+  target:
+    - target: dmg
+  category: public.app-category.productivity
+  icon: icon.icns
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: resources/entitlements.mac.plist
+  entitlementsInherit: resources/entitlements.mac.plist
+  # P0-3: nm-host binary (no extension) placed in nm-host/ subdirectory
+  extraResources:
+    - from: ../../apps/nm-host/dist/latch-nm-host
+      to: nm-host/latch-nm-host
+
+dmg:
+  title: "Latch ${version}"
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+
+publish: null
