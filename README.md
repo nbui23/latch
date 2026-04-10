@@ -1,4 +1,4 @@
-# Latch
+# Latch (WIP, broken)
 
 Latch is a local-first macOS focus blocker built with Electron.
 
