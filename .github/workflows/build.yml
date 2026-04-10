@@ -24,6 +24,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Install Pillow
+        run: pip install Pillow
+
       - name: Build Electron app (macOS)
         run: pnpm build:mac
         env:
