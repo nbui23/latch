@@ -24,8 +24,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - name: Install Pillow
-        run: python3 -m pip install Pillow
+        run: pip install Pillow
 
       - name: Build Electron app (macOS)
         run: pnpm build:mac
