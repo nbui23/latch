@@ -303,6 +303,7 @@ function ChromeInstructions() {
       </Step>
       <div style={{ marginTop: 16, background: '#1f1a00', border: '1px solid #78350f', borderRadius: 6, padding: '10px 14px', fontSize: 12, color: '#fbbf24' }}>
         <strong>Note:</strong> You need to repeat step 3 for each Chromium browser you want to block in.
+        {' '}If you previously loaded an older FreeTurkey or repo-local unpacked extension, remove it and reload from the bundled <Code>extensions/chrome</Code> folder—moved or deleted source folders break blocked-page redirects.
       </div>
     </div>
   )

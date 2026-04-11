@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
-    "build:mac": "node ./scripts/prepare-mac-build.mjs && pnpm build && env TMPDIR=/tmp electron-builder --mac",
+    "build:mac": "node ./scripts/prepare-mac-build.mjs && pnpm build && env TMPDIR=/tmp electron-builder --mac && node ./scripts/verify-release-artifacts.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "preview": "electron-vite preview"
   },

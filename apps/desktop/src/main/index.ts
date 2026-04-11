@@ -8,7 +8,7 @@ import { SessionManager } from './session/session-manager.js'
 import { ConfigStore } from './config/config-store.js'
 import { registerIpcHandlers } from './ipc/handlers.js'
 import { broadcastUISessionState, startUISocket } from './ui-ipc/ui-socket.js'
-import { registerNMHost, isNMHostRegistered } from './native-messaging/register.js'
+import { ensureNMHostRegistered } from './native-messaging/register.js'
 import { detectStaleSession } from './hosts/crash-recovery.js'
 import { removeBlock } from './hosts/hosts-manager.js'
 import { writeSessionAtomic } from './session/session-store.js'
@@ -305,9 +305,7 @@ app.on('before-quit', (event) => {
 })
 
 app.whenReady().then(async () => {
-  if (!isNMHostRegistered()) {
-    registerNMHost()
-  }
+  ensureNMHostRegistered()
 
   if (!isHelperInstalled()) {
     const result = await dialog.showMessageBox({

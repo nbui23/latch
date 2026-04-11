@@ -1,5 +1,5 @@
 import { execFileSync } from 'child_process'
-import { chmodSync, copyFileSync, existsSync, mkdirSync, rmSync } from 'fs'
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, rmSync } from 'fs'
 import { dirname, join, resolve } from 'path'
 import { fileURLToPath } from 'url'
 
@@ -31,11 +31,65 @@ function run(command, args, cwd) {
   execFileSync(command, args, { cwd, stdio: 'inherit' })
 }
 
+function fail(message) {
+  throw new Error(`[prepare-mac-build] ${message}`)
+}
+
+function validateChromeExtensionBundle() {
+  const bundleRoot = join(extensionRoot, 'dist', 'chrome')
+  const manifestPath = join(bundleRoot, 'manifest.json')
+
+  if (!existsSync(manifestPath)) {
+    fail(`Missing Chromium extension manifest at ${manifestPath}`)
+  }
+
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
+  const permissions = new Set(Array.isArray(manifest.permissions) ? manifest.permissions : [])
+  const webAccessibleResources = new Set(
+    Array.isArray(manifest.web_accessible_resources)
+      ? manifest.web_accessible_resources.flatMap((entry) =>
+          Array.isArray(entry?.resources) ? entry.resources.filter((resource) => typeof resource === 'string') : [],
+        )
+      : [],
+  )
+
+  if (typeof manifest.key !== 'string' || manifest.key.length === 0) {
+    fail('Chromium extension manifest is missing a stable "key"; bundled release builds will get a different native messaging origin.')
+  }
+
+  for (const permission of [
+    'nativeMessaging',
+    'declarativeNetRequest',
+    'declarativeNetRequestWithHostAccess',
+    'webNavigation',
+    'tabs',
+    'alarms',
+    'storage',
+  ]) {
+    if (!permissions.has(permission)) {
+      fail(`Chromium extension manifest is missing required permission "${permission}".`)
+    }
+  }
+
+  for (const resource of ['blocked.html', 'blocked.css']) {
+    if (!webAccessibleResources.has(resource)) {
+      fail(`Chromium extension manifest is missing required web_accessible_resource "${resource}".`)
+    }
+  }
+
+  for (const file of ['background.js', 'blocked.js', 'blocked.html', 'blocked.css']) {
+    if (!existsSync(join(bundleRoot, file))) {
+      fail(`Chromium extension bundle is missing required file ${file}.`)
+    }
+  }
+}
+
 run('node', [join(repoRoot, 'scripts', 'generate-brand-assets.mjs')], repoRoot)
 
 rmSync(join(desktopRoot, 'dist', 'mac'), { recursive: true, force: true })
 rmSync(join(desktopRoot, 'dist', 'mac-arm64'), { recursive: true, force: true })
 rmSync(join(desktopRoot, 'dist', 'mac-x64'), { recursive: true, force: true })
+rmSync(helperResourcesRoot, { recursive: true, force: true })
 
 mkdirSync(helperResourcesRoot, { recursive: true })
 if (existsSync(defaultElectronIcon) && !existsSync(iconPath)) {
@@ -58,6 +112,7 @@ copyFileSync(
 )
 
 run('pnpm', ['build:chrome'], extensionRoot)
+validateChromeExtensionBundle()
 run('node', [join(repoRoot, 'scripts', 'package-chrome-extension.mjs')], repoRoot)
 run('pnpm', ['build'], nmHostRoot)
 run('pnpm', ['run', 'pkg'], nmHostRoot)

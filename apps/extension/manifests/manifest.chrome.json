@@ -2,6 +2,7 @@
   "manifest_version": 3,
   "name": "Latch",
   "version": "1.0.0",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyCirAzg8JXuHoVndPDOKlvBmBiBMhnGTbUElM4gdOI3mcQVUDrmAPK/aMVc6du0R7xYTA3nOMXF2ToFVn0goR5R4jWJ62rlzGjQl4UMyaU0ud37OYQuAQ7zwiXBQVqsM8mdn3bzt5efypEGU2pfgNQYRCdBc1hX+GXaEx2Lw2itXU5JBYwxA6GTOwmi4T+Pmvo1iDClF9p9uBn8rLwC1jiXSu6SWurC8C5PvBoOWn+2c8I857cfi3JoHP2zeknQojOUdj1kTrE3Z6CAWU4l4InMWScP2tBRalvRJb6+qEBujnClHjiNXBdo0eZYgTgJikaxx6Gls2dc5DPaLVN+XQQIDAQAB",
   "description": "Focus blocker — shows a clean blocked page when a site is blocked by the Latch desktop app.",
   "permissions": [
     "storage",
