@@ -41,7 +41,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload DMG
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: Latch-mac
           path: |
@@ -51,10 +51,20 @@ jobs:
 
       - name: Publish GitHub release assets
         if: github.event.repository.fork == false && github.ref_type == 'tag'
-        uses: softprops/action-gh-release@v2
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          files: |
-            apps/desktop/dist/*.dmg
-            apps/desktop/dist/*.blockmap
-            apps/extension/dist/Latch-chrome-extension.zip
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" \
+              apps/desktop/dist/*.dmg \
+              apps/desktop/dist/*.blockmap \
+              apps/extension/dist/Latch-chrome-extension.zip \
+              --clobber
+          else
+            gh release create "$RELEASE_TAG" \
+              apps/desktop/dist/*.dmg \
+              apps/desktop/dist/*.blockmap \
+              apps/extension/dist/Latch-chrome-extension.zip \
+              --generate-notes
+          fi
