@@ -5,7 +5,6 @@
     "module": "ES2020",
     "moduleResolution": "bundler",
     "outDir": "./dist",
-    "rootDir": "./src",
     "lib": ["ES2020", "DOM"],
     "baseUrl": ".",
     "paths": {

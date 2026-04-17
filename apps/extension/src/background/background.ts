@@ -17,6 +17,7 @@ import {
   shouldIgnoreNoSessionSnapshot,
   shouldSkipBlockedRedirect,
 } from './background-logic'
+import { parseNMMessage } from '../nm-client/client'
 
 const BLOCKED_PAGE = chrome.runtime.getURL('blocked.html')
 const NM_HOST_ID = 'app.latch'
@@ -246,12 +247,16 @@ function sendNativeMessage(msg: object): void {
 }
 
 async function handleNativeMessage(msg: unknown): Promise<void> {
-  if (!msg || typeof msg !== 'object') return
-  const m = msg as Record<string, unknown>
+  // Validate every inbound NM payload against the shared Zod schema. A
+  // malformed/unknown message (e.g. from a stale NM host binary) is silently
+  // dropped instead of being coerced through an unsafe cast.
+  const validated = parseNMMessage(msg)
+  if (!validated) return
   const previousSnapshot = getSessionSnapshot()
 
-  if (m.type === 'session_state') {
-    const nextSnapshot = sessionSnapshotFromPayload((m.payload as SessionPayload | null) ?? null)
+  if (validated.type === 'session_state') {
+    const payload: SessionPayload | null = validated.payload
+    const nextSnapshot = sessionSnapshotFromPayload(payload)
     const transitionAction = getSessionTransitionAction(previousSnapshot, nextSnapshot)
     if (transitionAction === 'none') return
 
@@ -266,7 +271,7 @@ async function handleNativeMessage(msg: unknown): Promise<void> {
     return
   }
 
-  if (m.type === 'no_session') {
+  if (validated.type === 'no_session') {
     // The NM bridge also emits no_session for transient transport failures.
     // Do not tear down an already-blocking tab until we receive an explicit
     // inactive session snapshot from the desktop app.
@@ -283,7 +288,7 @@ async function handleNativeMessage(msg: unknown): Promise<void> {
     return
   }
 
-  if (m.type === 'timer_state') {
+  if (validated.type === 'timer_state') {
     sendNativeMessage({ type: 'get_state' })
   }
 }

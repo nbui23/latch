@@ -3,7 +3,13 @@
  */
 
 import { ipcMain, BrowserWindow } from 'electron'
-import type { IpcSessionStart, RecoveryAction, Session } from '@latch/shared'
+import { z } from 'zod'
+import type { Session } from '@latch/shared'
+import {
+  BlockListSchema,
+  IpcSessionStartSchema,
+  RecoveryActionSchema,
+} from '@latch/shared'
 import type { SessionManager } from '../session/session-manager.js'
 import type { ConfigStore } from '../config/config-store.js'
 import { validateDomain } from '../blocklist/validator.js'
@@ -12,17 +18,44 @@ import { writeSessionAtomic } from '../session/session-store.js'
 import { uninstallMacHelper } from '../hosts/elevation.js'
 import { unregisterNMHost } from '../native-messaging/register.js'
 
+// Partial preferences patch for `preferences:update` — each field optional,
+// no defaults applied (unlike AppPreferencesSchema which fills defaults).
+const AppPreferencesPatchSchema = z
+  .object({
+    defaultDurationMs: z.number().nonnegative(),
+    showMenuBarIcon: z.boolean(),
+    showDockIconWhenMenuBarEnabled: z.boolean(),
+  })
+  .partial()
+
+type IpcRegistrar = Pick<typeof ipcMain, 'handle'>
+
 export function registerIpcHandlers(
   sessionManager: SessionManager,
   configStore: ConfigStore,
   staleSession?: Session | null,
   onPreferencesChanged?: () => void,
 ): void {
-  ipcMain.handle('session:get-state', () => {
+  registerIpcHandlersWith(ipcMain, sessionManager, configStore, staleSession, onPreferencesChanged)
+}
+
+export function registerIpcHandlersWith(
+  ipc: IpcRegistrar,
+  sessionManager: SessionManager,
+  configStore: ConfigStore,
+  staleSession?: Session | null,
+  onPreferencesChanged?: () => void,
+): void {
+  ipc.handle('session:get-state', () => {
     return sessionManager.getSession()
   })
 
-  ipcMain.handle('session:start', async (_event, opts: IpcSessionStart) => {
+  ipc.handle('session:start', async (_event, rawOpts) => {
+    const parsed = IpcSessionStartSchema.safeParse(rawOpts)
+    if (!parsed.success) {
+      return { error: 'Invalid session start parameters' }
+    }
+    const opts = parsed.data
     const blocklist = configStore.getBlocklist(opts.blocklistId)
     if (!blocklist) {
       return { error: `Blocklist ${opts.blocklistId} not found` }
@@ -39,7 +72,7 @@ export function registerIpcHandlers(
     }
   })
 
-  ipcMain.handle('session:stop', async () => {
+  ipc.handle('session:stop', async () => {
     try {
       await sessionManager.stopSession()
       return { ok: true }
@@ -48,26 +81,34 @@ export function registerIpcHandlers(
     }
   })
 
-  ipcMain.handle('blocklist:load', () => {
+  ipc.handle('blocklist:load', () => {
     return configStore.getAllBlocklists()
   })
 
-  ipcMain.handle('blocklist:save', (_event, blocklist) => {
+  ipc.handle('blocklist:save', (_event, rawBlocklist) => {
+    const parsed = BlockListSchema.safeParse(rawBlocklist)
+    if (!parsed.success) {
+      return { error: 'Invalid blocklist payload' }
+    }
     try {
-      configStore.saveBlocklist(blocklist)
+      configStore.saveBlocklist(parsed.data)
       return { ok: true }
     } catch (err: unknown) {
       return { error: (err as Error).message }
     }
   })
 
-  ipcMain.handle('preferences:get', () => {
+  ipc.handle('preferences:get', () => {
     return configStore.getPreferences()
   })
 
-  ipcMain.handle('preferences:update', (_event, patch) => {
+  ipc.handle('preferences:update', (_event, rawPatch) => {
+    const parsed = AppPreferencesPatchSchema.safeParse(rawPatch ?? {})
+    if (!parsed.success) {
+      return { error: 'Invalid preferences patch' }
+    }
     try {
-      const preferences = configStore.updatePreferences(patch ?? {})
+      const preferences = configStore.updatePreferences(parsed.data)
       onPreferencesChanged?.()
       return { ok: true, preferences }
     } catch (err: unknown) {
@@ -75,11 +116,20 @@ export function registerIpcHandlers(
     }
   })
 
-  ipcMain.handle('domain:validate', (_event, input: string) => {
-    return validateDomain(input)
+  ipc.handle('domain:validate', (_event, rawInput) => {
+    const parsed = z.string().safeParse(rawInput)
+    if (!parsed.success) {
+      return { valid: false, error: 'Domain must be a string' }
+    }
+    return validateDomain(parsed.data)
   })
 
-  ipcMain.handle('recovery:action', async (_event, action: RecoveryAction) => {
+  ipc.handle('recovery:action', async (_event, rawAction) => {
+    const parsedAction = RecoveryActionSchema.safeParse(rawAction)
+    if (!parsedAction.success) {
+      return { error: 'Unknown recovery action' }
+    }
+    const action = parsedAction.data
     const sessionPath = sessionManager.getSessionPath()
     if (action === 'cleanup') {
       try {
@@ -102,7 +152,7 @@ export function registerIpcHandlers(
     return { error: 'Unknown recovery action' }
   })
 
-  ipcMain.handle('helper:uninstall', async () => {
+  ipc.handle('helper:uninstall', async () => {
     try {
       if (sessionManager.isActive()) {
         await sessionManager.stopSession()

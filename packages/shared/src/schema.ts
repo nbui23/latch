@@ -37,6 +37,20 @@ export const HelperCommandSchema = z.discriminatedUnion('cmd', [
   z.object({ cmd: z.literal('ping') }),
 ])
 
+export const HelperResponseSchema = z.union([
+  z.object({ ok: z.literal(true) }),
+  z.object({ ok: z.literal(false), error: z.string() }),
+  z.object({ pong: z.literal(true) }),
+])
+
+export const IpcSessionStartSchema = z.object({
+  blocklistId: z.string().min(1),
+  durationMs: z.number().nonnegative(),
+  isIndefinite: z.boolean().optional(),
+})
+
+export const RecoveryActionSchema = z.enum(['resume', 'cleanup'])
+
 export const NativeMessageToElectronSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('get_state') }),
   z.object({ type: z.literal('subscribe_state') }),

@@ -11,11 +11,12 @@ import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
 import type { NativeMessageToElectron, NativeMessageFromElectron, Session } from '@latch/shared'
+import { NativeMessageToElectronSchema } from '@latch/shared'
 
 // P0-7: /var/run is root-owned on modern macOS; unprivileged Electron cannot bind there.
 // os.tmpdir() returns a per-user writable directory for the current macOS user.
 // The nm-host proxy derives the same path using the same os.tmpdir() call.
-const UI_SOCKET = path.join(os.tmpdir(), 'latch-ui.sock')
+const UI_SOCKET_ENV = 'LATCH_UI_SOCKET'
 
 export type MessageHandler = (
   msg: NativeMessageToElectron
@@ -24,13 +25,88 @@ export type MessageHandler = (
 let server: net.Server | null = null
 const subscribers = new Set<net.Socket>()
 
-export function startUISocket(onMessage: MessageHandler): void {
-  // Remove stale socket (tmpfs is cleared on reboot, but clean for dev)
+export function getUISocketPath(): string {
+  return process.env[UI_SOCKET_ENV] || path.join(os.tmpdir(), 'latch-ui.sock')
+}
+
+function listenWithRestrictedUmask(target: net.Server, socketPath: string): void {
+  let previousUmask: number | null = null
   try {
-    fs.unlinkSync(UI_SOCKET)
-  } catch {
-    // ignore — may not exist
+    try {
+      previousUmask = process.umask(0o177)
+    } catch {
+      target.listen(socketPath)
+      return
+    }
+    target.listen(socketPath)
+  } finally {
+    if (previousUmask !== null) {
+      process.umask(previousUmask)
+    }
   }
+}
+
+function probeSocket(socketPath: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const probe = net.createConnection(socketPath)
+    probe.once('connect', () => {
+      probe.end()
+      resolve(true)
+    })
+    probe.once('error', () => resolve(false))
+  })
+}
+
+function cleanupSocketFile(socketPath: string): void {
+  try {
+    fs.unlinkSync(socketPath)
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+      console.error('[ui-socket] Failed to unlink socket:', err)
+    }
+  }
+}
+
+async function bindUISocket(target: net.Server, socketPath: string): Promise<void> {
+  let staleCleanupAttempted = false
+
+  while (true) {
+    const listenResult = await new Promise<'listening' | NodeJS.ErrnoException>((resolve) => {
+      const onListening = () => {
+        target.off('error', onError)
+        resolve('listening')
+      }
+      const onError = (err: NodeJS.ErrnoException) => {
+        target.off('listening', onListening)
+        resolve(err)
+      }
+
+      target.once('listening', onListening)
+      target.once('error', onError)
+      listenWithRestrictedUmask(target, socketPath)
+    })
+
+    if (listenResult === 'listening') {
+      return
+    }
+
+    if (listenResult.code !== 'EADDRINUSE' || staleCleanupAttempted) {
+      throw listenResult
+    }
+
+    const inUse = await probeSocket(socketPath)
+    if (inUse) {
+      throw listenResult
+    }
+
+    cleanupSocketFile(socketPath)
+    staleCleanupAttempted = true
+  }
+}
+
+export function startUISocket(onMessage: MessageHandler): void {
+  if (server) return
+  const socketPath = getUISocketPath()
 
   server = net.createServer((socket) => {
     let buf = ''
@@ -41,13 +117,21 @@ export function startUISocket(onMessage: MessageHandler): void {
       const msgStr = buf.slice(0, nl)
       buf = buf.slice(nl + 1)
 
-      let msg: NativeMessageToElectron
+      let rawMsg: unknown
       try {
-        msg = JSON.parse(msgStr) as NativeMessageToElectron
+        rawMsg = JSON.parse(msgStr)
       } catch {
         socket.write(JSON.stringify({ type: 'error', error: 'Invalid JSON' }) + '\n')
         return
       }
+      const parsed = NativeMessageToElectronSchema.safeParse(rawMsg)
+      if (!parsed.success) {
+        socket.write(
+          JSON.stringify({ type: 'error', error: 'Unknown message type' }) + '\n'
+        )
+        return
+      }
+      const msg: NativeMessageToElectron = parsed.data
 
       if (msg.type === 'subscribe_state') {
         subscribers.add(socket)
@@ -69,23 +153,35 @@ export function startUISocket(onMessage: MessageHandler): void {
     })
   })
 
-  server.listen(UI_SOCKET, () => {
-    console.log(`[ui-socket] Listening on ${UI_SOCKET}`)
-    try {
-      fs.chmodSync(UI_SOCKET, 0o600)
-    } catch {
-      // best-effort
-    }
-  })
-
   server.on('error', (err) => {
+    if (!server?.listening && (err as NodeJS.ErrnoException).code === 'EADDRINUSE') {
+      return
+    }
     console.error('[ui-socket] Server error:', err)
   })
+
+  void bindUISocket(server, socketPath)
+    .then(() => {
+      console.log(`[ui-socket] Listening on ${socketPath}`)
+      try {
+        fs.chmodSync(socketPath, 0o600)
+      } catch {
+        // best-effort
+      }
+    })
+    .catch((err) => {
+      console.error('[ui-socket] Failed to bind socket:', err)
+      server?.close()
+      server = null
+    })
 }
 
 export function stopUISocket(): void {
   subscribers.clear()
-  server?.close()
+  const socketPath = getUISocketPath()
+  server?.close(() => {
+    cleanupSocketFile(socketPath)
+  })
   server = null
 }
 

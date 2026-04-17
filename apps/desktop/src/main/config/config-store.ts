@@ -33,8 +33,8 @@ export class ConfigStore {
   private configPath: string
   private data: AppConfig
 
-  constructor() {
-    this.configPath = path.join(app.getPath('userData'), 'config.json')
+  constructor(configPath?: string) {
+    this.configPath = configPath ?? path.join(app.getPath('userData'), 'config.json')
     this.data = this.load()
   }
 
@@ -49,7 +49,42 @@ export class ConfigStore {
   }
 
   private save(): void {
-    fs.writeFileSync(this.configPath, JSON.stringify(this.data, null, 2), 'utf8')
+    // Atomic write: temp file + fsync + rename. Prevents partial/corrupt
+    // config.json if the process crashes mid-write. Matches the pattern
+    // used for session.json (see session-store.ts).
+    const dir = path.dirname(this.configPath)
+    const tmp = this.configPath + '.tmp'
+    const json = JSON.stringify(this.data, null, 2)
+
+    try {
+      const fd = fs.openSync(tmp, 'w', 0o600)
+      try {
+        fs.writeSync(fd, json)
+        fs.fsyncSync(fd)
+      } finally {
+        fs.closeSync(fd)
+      }
+
+      fs.renameSync(tmp, this.configPath)
+
+      try {
+        const dirFd = fs.openSync(dir, 'r')
+        try {
+          fs.fsyncSync(dirFd)
+        } finally {
+          fs.closeSync(dirFd)
+        }
+      } catch {
+        // best-effort: some filesystems refuse fsync on directories
+      }
+    } catch (error) {
+      try {
+        fs.unlinkSync(tmp)
+      } catch {
+        // ignore cleanup failures
+      }
+      throw error
+    }
   }
 
   getAllBlocklists(): BlockList[] {

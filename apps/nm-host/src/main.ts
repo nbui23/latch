@@ -10,63 +10,15 @@ import * as net from 'net'
 import * as os from 'os'
 import * as path from 'path'
 import type { NativeMessageFromElectron, NativeMessageToElectron } from '@latch/shared'
+import {
+  NativeMessageFromElectronSchema,
+  NativeMessageToElectronSchema,
+} from '@latch/shared'
+import { readNativeMessage, writeNativeMessage } from './framing.js'
 
 // P0-7: /var/run is root-owned on macOS; use per-user temp dir instead.
 // Must match the path used in apps/desktop/src/main/ui-ipc/ui-socket.ts.
-const UI_SOCKET = path.join(os.tmpdir(), 'latch-ui.sock')
-
-// MARK: - NM framing: 4-byte little-endian length prefix + JSON body
-
-function readNativeMessage(): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    const lenBuf = Buffer.alloc(4)
-    let lenBytesRead = 0
-    let msgLen = -1
-
-    const cleanup = () => {
-      process.stdin.removeListener('readable', onReadable)
-      process.stdin.removeListener('error', onError)
-      process.stdin.removeListener('end', onEnd)
-    }
-
-    const onError = (err: Error) => { cleanup(); reject(err) }
-    const onEnd = () => { cleanup(); reject(new Error('stdin closed')) }
-
-    const onReadable = () => {
-      // Phase 1: read 4-byte length prefix
-      while (lenBytesRead < 4) {
-        const chunk = process.stdin.read(4 - lenBytesRead) as Buffer | null
-        if (!chunk) return // wait for more data
-        chunk.copy(lenBuf, lenBytesRead)
-        lenBytesRead += chunk.length
-      }
-      if (msgLen === -1) {
-        msgLen = lenBuf.readUInt32LE(0)
-      }
-
-      // Phase 2: read message body
-      const body = process.stdin.read(msgLen) as Buffer | null
-      if (!body) return // wait for more data
-      cleanup()
-      resolve(body)
-    }
-
-    process.stdin.on('readable', onReadable)
-    process.stdin.on('error', onError)
-    process.stdin.on('end', onEnd)
-    // Attempt immediate read in case data is already buffered
-    onReadable()
-  })
-}
-
-function writeNativeMessage(msg: object): void {
-  const json = JSON.stringify(msg)
-  const len = Buffer.byteLength(json, 'utf8')
-  const buf = Buffer.alloc(4 + len)
-  buf.writeUInt32LE(len, 0)
-  buf.write(json, 4, 'utf8')
-  process.stdout.write(buf)
-}
+const UI_SOCKET = process.env.LATCH_UI_SOCKET || path.join(os.tmpdir(), 'latch-ui.sock')
 
 // MARK: - Connect to Electron UI socket with retry
 
@@ -120,9 +72,17 @@ function handleSubscriptionData(chunk: Buffer): void {
     const line = subscriptionBuffer.slice(0, newline)
     subscriptionBuffer = subscriptionBuffer.slice(newline + 1)
 
+    let parsed: unknown
     try {
-      writeNativeMessage(JSON.parse(line) as NativeMessageFromElectron)
+      parsed = JSON.parse(line)
     } catch {
+      writeNativeMessage(NO_SESSION_MSG)
+      continue
+    }
+    const validated = NativeMessageFromElectronSchema.safeParse(parsed)
+    if (validated.success) {
+      writeNativeMessage(validated.data)
+    } else {
       writeNativeMessage(NO_SESSION_MSG)
     }
   }
@@ -172,13 +132,19 @@ async function main() {
       process.exit(0)
     }
 
-    let msg: NativeMessageToElectron
+    let rawMsg: unknown
     try {
-      msg = JSON.parse(msgBuf.toString('utf8')) as NativeMessageToElectron
+      rawMsg = JSON.parse(msgBuf.toString('utf8'))
     } catch {
       writeNativeMessage({ type: 'error', error: 'Invalid JSON from browser' })
       continue
     }
+    const parsedMsg = NativeMessageToElectronSchema.safeParse(rawMsg)
+    if (!parsedMsg.success) {
+      writeNativeMessage({ type: 'error', error: 'Unknown message type' })
+      continue
+    }
+    const msg: NativeMessageToElectron = parsedMsg.data
 
     // Try to proxy to Electron
     const socket = await connectWithRetry()
@@ -208,11 +174,18 @@ function proxyMessage(
       buf += chunk.toString('utf8')
       const newline = buf.indexOf('\n')
       if (newline !== -1) {
+        let raw: unknown
         try {
-          const parsed = JSON.parse(buf.slice(0, newline)) as NativeMessageFromElectron
-          resolve(parsed)
+          raw = JSON.parse(buf.slice(0, newline))
         } catch {
           reject(new Error('Invalid JSON from Electron'))
+          return
+        }
+        const validated = NativeMessageFromElectronSchema.safeParse(raw)
+        if (validated.success) {
+          resolve(validated.data)
+        } else {
+          reject(new Error('Malformed message from Electron'))
         }
       }
     })

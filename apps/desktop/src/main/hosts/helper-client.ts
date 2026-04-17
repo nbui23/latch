@@ -6,6 +6,7 @@
 
 import * as net from 'net'
 import type { HelperCommand, HelperResponse } from '@latch/shared'
+import { HelperResponseSchema } from '@latch/shared'
 
 const HELPER_SOCKET = '/var/run/latch.sock'
 
@@ -40,11 +41,19 @@ export async function sendToHelper(cmd: HelperCommand): Promise<HelperResponse> 
       if (nl !== -1) {
         clearTimeout(timer)
         socket.destroy()
+        let raw: unknown
         try {
-          resolve(JSON.parse(buf.slice(0, nl)) as HelperResponse)
+          raw = JSON.parse(buf.slice(0, nl))
         } catch {
           reject(new Error('Invalid JSON from helper'))
+          return
         }
+        const parsed = HelperResponseSchema.safeParse(raw)
+        if (!parsed.success) {
+          reject(new Error('Malformed response from helper'))
+          return
+        }
+        resolve(parsed.data)
       }
     })
     socket.on('error', (err) => {
@@ -58,7 +67,7 @@ export async function sendToHelper(cmd: HelperCommand): Promise<HelperResponse> 
 export async function isHelperRunning(): Promise<boolean> {
   try {
     const resp = await sendToHelper({ cmd: 'ping' })
-    return 'pong' in resp && (resp as { pong: boolean }).pong === true
+    return 'pong' in resp && resp.pong === true
   } catch {
     return false
   }

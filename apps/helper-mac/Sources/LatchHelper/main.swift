@@ -12,102 +12,15 @@ let socketGroupName = "staff"
 let socketMode: mode_t = 0o660
 let hostsFileManager = HostsFileManager(hostsURL: URL(fileURLWithPath: hostsPath))
 
-// MARK: - Command types
+// A well-formed command is well under 256 KiB (5000 domains * ~50 bytes each
+// is ~250 KiB at the helper's own domain-count cap). Reject any larger
+// accumulated payload before it can pressure the helper's memory.
+let maxRequestBytes: Int = 512 * 1024
 
-struct WriteBlockCommand: Codable {
-    let cmd: String
-    let domains: [String]
-    let sessionId: String
-}
-
-struct RemoveBlockCommand: Codable {
-    let cmd: String
-    let sessionId: String
-}
-
-struct PingCommand: Codable {
-    let cmd: String
-}
-
-struct CommandEnvelope: Codable {
-    let cmd: String
-}
-
-struct OkResponse: Codable {
-    let ok: Bool
-}
-
-struct PongResponse: Codable {
-    let pong: Bool
-}
-
-struct ErrorResponse: Codable {
-    let ok: Bool
-    let error: String
-}
-
-// MARK: - Handle a single client connection
-
-func handleClient(_ clientFd: Int32) {
-    defer { close(clientFd) }
-    var buffer = Data()
-    let chunk = UnsafeMutablePointer<UInt8>.allocate(capacity: 4096)
-    defer { chunk.deallocate() }
-
-    // Read until newline (JSON is newline-delimited)
-    outer: while true {
-        let n = read(clientFd, chunk, 4096)
-        if n <= 0 { break }
-        buffer.append(chunk, count: n)
-        if buffer.contains(UInt8(ascii: "\n")) { break }
-    }
-
-    guard !buffer.isEmpty else { return }
-
-    func sendJSON<T: Encodable>(_ value: T) {
-        if let data = try? JSONEncoder().encode(value),
-           var str = String(data: data, encoding: .utf8) {
-            str += "\n"
-            str.withCString { ptr in
-                _ = write(clientFd, ptr, strlen(ptr))
-            }
-        }
-    }
-
-    // Decode envelope to get command type
-    guard let envelope = try? JSONDecoder().decode(CommandEnvelope.self, from: buffer) else {
-        sendJSON(ErrorResponse(ok: false, error: "Invalid JSON"))
-        return
-    }
-
-    switch envelope.cmd {
-    case "ping":
-        sendJSON(PongResponse(pong: true))
-
-    case "write_block":
-        guard let cmd = try? JSONDecoder().decode(WriteBlockCommand.self, from: buffer) else {
-            sendJSON(ErrorResponse(ok: false, error: "Invalid write_block payload"))
-            return
-        }
-        do {
-            try hostsFileManager.writeBlock(domains: cmd.domains)
-            sendJSON(OkResponse(ok: true))
-        } catch {
-            sendJSON(ErrorResponse(ok: false, error: error.localizedDescription))
-        }
-
-    case "remove_block":
-        do {
-            try hostsFileManager.removeBlock()
-            sendJSON(OkResponse(ok: true))
-        } catch {
-            sendJSON(ErrorResponse(ok: false, error: error.localizedDescription))
-        }
-
-    default:
-        sendJSON(ErrorResponse(ok: false, error: "Unknown command: \(envelope.cmd)"))
-    }
-}
+// Bound the total time a client may hold the helper on a partial read.
+// Without this a malicious client that never sends a newline would pin the
+// single-threaded accept loop forever.
+let recvTimeoutSeconds: time_t = 5
 
 // MARK: - Main server loop
 
@@ -179,5 +92,10 @@ while true {
         }
     }
     guard clientFd >= 0 else { continue }
-    handleClient(clientFd)
+    handleClientConnection(
+        clientFd: clientFd,
+        manager: hostsFileManager,
+        maxRequestBytes: maxRequestBytes,
+        recvTimeout: timeval(tv_sec: recvTimeoutSeconds, tv_usec: 0)
+    )
 }

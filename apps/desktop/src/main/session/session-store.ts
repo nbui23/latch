@@ -7,6 +7,7 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import type { Session } from '@latch/shared'
+import { SessionSchema } from '@latch/shared'
 
 export function writeSessionAtomic(filePath: string, data: Session | null): void {
   const dir = path.dirname(filePath)
@@ -33,13 +34,24 @@ export function writeSessionAtomic(filePath: string, data: Session | null): void
 }
 
 export function readSession(filePath: string): Session | null {
+  let parsed: unknown
   try {
     const raw = fs.readFileSync(filePath, 'utf8')
-    const parsed = JSON.parse(raw)
-    return parsed as Session | null
+    parsed = JSON.parse(raw)
   } catch {
     return null
   }
+  // session.json may legitimately be `null` when the app last exited idle.
+  if (parsed === null) return null
+  const result = SessionSchema.safeParse(parsed)
+  if (!result.success) {
+    console.warn(
+      `[session-store] Discarding invalid session file at ${filePath}:`,
+      result.error.message,
+    )
+    return null
+  }
+  return result.data
 }
 
 export function deleteSession(filePath: string): void {
