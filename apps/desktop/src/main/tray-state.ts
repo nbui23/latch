@@ -1,11 +1,10 @@
 import type { Session } from '@latch/shared'
+import { isBlockingSession } from '@latch/shared'
 
 export type TrayVisualState = 'inactive' | 'active'
 
-const BLOCKING_STATUSES = new Set<Session['status']>(['starting', 'active', 'stopping'])
-
 export function isBlockingVisibleInTray(session: Session | null): boolean {
-  return session !== null && session.domains.length > 0 && BLOCKING_STATUSES.has(session.status)
+  return isBlockingSession(session)
 }
 
 export function getTrayVisualState(session: Session | null): TrayVisualState {
@@ -17,33 +16,26 @@ export function getTrayStatusLabel(session: Session | null, now = Date.now()): s
     return 'Latch — Idle'
   }
 
-  if (session.status === 'starting') {
-    return 'Latch — Starting block…'
-  }
-
-  if (session.status === 'stopping') {
-    return 'Latch — Ending block…'
-  }
-
-  if (session.status === 'active') {
-    if (session.isIndefinite) {
-      return 'Latch — Blocking active'
+  switch (session.status) {
+    case 'starting':
+      return 'Latch — Starting block…'
+    case 'stopping':
+      return 'Latch — Ending block…'
+    case 'recovering':
+      return 'Latch — Recovering session…'
+    case 'helper_unavailable':
+      return 'Latch — Helper unavailable'
+    case 'idle':
+      return 'Latch — Idle'
+    case 'active': {
+      if (session.isIndefinite) {
+        return 'Latch — Blocking active'
+      }
+      const remainingMs = Math.max(0, session.startedAt + session.durationMs - now)
+      const mins = Math.max(1, Math.ceil(remainingMs / 60000))
+      return `Latch — ${mins}m remaining`
     }
-
-    const remainingMs = Math.max(0, session.startedAt + session.durationMs - now)
-    const mins = Math.max(1, Math.ceil(remainingMs / 60000))
-    return `Latch — ${mins}m remaining`
   }
-
-  if (session.status === 'recovering') {
-    return 'Latch — Recovering session…'
-  }
-
-  if (session.status === 'helper_unavailable') {
-    return 'Latch — Helper unavailable'
-  }
-
-  return 'Latch — Idle'
 }
 
 export function getTrayMenuBarTitle(session: Session | null): string {

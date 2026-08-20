@@ -1,5 +1,5 @@
 /**
- * Crash recovery — OR-semantics detection + 7-row policy table.
+ * Crash recovery — OR-semantics detection + policy table.
  *
  * Recovery policy table (from plan Section 2.2):
  *
@@ -12,9 +12,14 @@
  * | active              | absent        | reset to idle      | No          |
  * | stopping            | present       | auto-clean + toast | No          |
  * | stopping            | absent        | reset to idle      | No          |
+ *
+ * The table is encoded as an exhaustive switch over `SessionStatus`: adding a
+ * status to the shared schema fails this file at compile time until its
+ * recovery behaviour is decided.
  */
 
-import type { StaleSessionInfo } from '@latch/shared'
+import type { SessionStatus, StaleSessionInfo } from '@latch/shared'
+import { isBlockingStatus } from '@latch/shared'
 import { hasActiveBlock } from './hosts-manager.js'
 import { readSession } from '../session/session-store.js'
 
@@ -23,6 +28,11 @@ export type RecoveryPolicy =
   | { action: 'reset'; requiresDialog: false }
   | { action: 'dialog'; requiresDialog: true }
   | { action: 'none'; requiresDialog: false }
+
+const AUTO_CLEAN: RecoveryPolicy = { action: 'auto-clean', requiresDialog: false }
+const RESET: RecoveryPolicy = { action: 'reset', requiresDialog: false }
+const DIALOG: RecoveryPolicy = { action: 'dialog', requiresDialog: true }
+const NONE: RecoveryPolicy = { action: 'none', requiresDialog: false }
 
 export interface StaleSessionDetection extends StaleSessionInfo {
   policy: RecoveryPolicy
@@ -34,45 +44,31 @@ export function detectStaleSession(sessionFilePath: string): StaleSessionDetecti
 
   const status = session?.status ?? 'idle'
 
-  // OR semantics: either condition alone triggers recovery
-  const isStale =
-    status === 'starting' ||
-    status === 'active' ||
-    status === 'stopping' ||
-    hostsHasMarkers
+  // OR semantics: an interrupted status or leftover markers alone is enough.
+  if (!isBlockingStatus(status) && !hostsHasMarkers) return null
 
-  if (!isStale) return null
-
-  const policy = getRecoveryPolicy(status, hostsHasMarkers)
-
-  return { session, hostsHasMarkers, policy }
+  return { session, hostsHasMarkers, policy: getRecoveryPolicy(status, hostsHasMarkers) }
 }
 
 export function getRecoveryPolicy(
-  status: string,
-  hostsHasMarkers: boolean
+  status: SessionStatus,
+  hostsHasMarkers: boolean,
 ): RecoveryPolicy {
-  if (status === 'idle' || status === 'recovering' || status === 'helper_unavailable') {
-    if (hostsHasMarkers) return { action: 'auto-clean', requiresDialog: false }
-    return { action: 'none', requiresDialog: false }
-  }
+  switch (status) {
+    // Nothing was in flight — only leftover markers need cleaning up.
+    case 'idle':
+    case 'recovering':
+    case 'helper_unavailable':
+      return hostsHasMarkers ? AUTO_CLEAN : NONE
 
-  if (status === 'starting') {
-    if (!hostsHasMarkers) return { action: 'reset', requiresDialog: false }
-    return { action: 'dialog', requiresDialog: true }
-  }
+    // Crashed mid-start or mid-session: markers mean the user may still have a
+    // session worth resuming, so ask before touching it.
+    case 'starting':
+    case 'active':
+      return hostsHasMarkers ? DIALOG : RESET
 
-  if (status === 'active') {
-    if (!hostsHasMarkers) return { action: 'reset', requiresDialog: false }
-    return { action: 'dialog', requiresDialog: true }
+    // The user already asked to stop — finish the job without prompting.
+    case 'stopping':
+      return hostsHasMarkers ? AUTO_CLEAN : RESET
   }
-
-  if (status === 'stopping') {
-    if (hostsHasMarkers) return { action: 'auto-clean', requiresDialog: false }
-    return { action: 'reset', requiresDialog: false }
-  }
-
-  // Fallback — unknown status with markers
-  if (hostsHasMarkers) return { action: 'auto-clean', requiresDialog: false }
-  return { action: 'reset', requiresDialog: false }
 }

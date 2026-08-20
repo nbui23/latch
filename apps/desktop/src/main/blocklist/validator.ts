@@ -1,7 +1,12 @@
 /**
  * Domain validator
  * Rejects reserved IP addresses and normalizes URLs to bare domains.
+ *
+ * Returns the shared `DomainValidationResult` union: a caller that sees
+ * `valid: true` gets `normalized` without a non-null assertion.
  */
+
+import type { DomainValidationResult } from '@latch/shared'
 
 const RESERVED_EXACT = new Set([
   'localhost',
@@ -35,13 +40,7 @@ const PRIVATE_PREFIXES = [
   '172.31.',
 ]
 
-export interface ValidationResult {
-  valid: boolean
-  normalized?: string
-  error?: string
-}
-
-export function validateDomain(input: string): ValidationResult {
+export function validateDomain(input: string): DomainValidationResult {
   if (!input || !input.trim()) {
     return { valid: false, error: 'Domain cannot be empty' }
   }

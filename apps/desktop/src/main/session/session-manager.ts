@@ -47,13 +47,13 @@ export class SessionManager {
   }
 
   async startSession(opts: IpcSessionStart, domains: string[]): Promise<void> {
-    if (this.currentSession?.status !== 'idle' && this.currentSession !== null) {
+    if (this.currentSession !== null && this.currentSession.status !== 'idle') {
       throw new Error('A session is already active')
     }
 
     const helperOk = await isHelperRunning()
     if (!helperOk) {
-      this.setState({ status: 'helper_unavailable' } as Partial<Session>)
+      this.setState({ status: 'helper_unavailable' })
       throw new Error(
         'Focus helper is not running. Restart Latch to restore it.'
       )
@@ -71,9 +71,7 @@ export class SessionManager {
     }
 
     // Step 1: write intent BEFORE helper call (crash-safe)
-    writeSessionAtomic(this.sessionPath, { ...session })
-    this.currentSession = session
-    this.onStateChange({ ...session })
+    this.commit({ ...session })
 
     // Step 2: call helper
     await writeBlock(session.id, domains)
@@ -81,36 +79,21 @@ export class SessionManager {
     // Step 3: mark active
     session.status = 'active'
     session.intent = undefined
-    writeSessionAtomic(this.sessionPath, { ...session })
-    this.onStateChange({ ...session })
+    this.commit({ ...session })
 
-    // Start countdown timer (timed sessions only)
-    if (!session.isIndefinite) {
-      this.timer = new SessionTimer(session.startedAt, session.durationMs)
-      this.timer.start(
-        (_remainingMs) => {
-          this.onStateChange({ ...session, status: 'active' })
-        },
-        () => {
-          void this.stopSession()
-        }
-      )
-    }
+    this.startCountdown(session)
   }
 
   async stopSession(): Promise<void> {
     if (!this.currentSession) return
 
     const session = { ...this.currentSession }
-    this.timer?.stop()
-    this.timer = null
+    this.clearCountdown()
 
     // Step 1: write stopping intent
     session.status = 'stopping'
     session.intent = 'will_remove_hosts'
-    writeSessionAtomic(this.sessionPath, session)
-    this.currentSession = session
-    this.onStateChange(session)
+    this.commit(session)
 
     // Step 2: call helper
     try {
@@ -120,38 +103,49 @@ export class SessionManager {
     }
 
     // Step 3: mark idle
-    this.currentSession = null
-    writeSessionAtomic(this.sessionPath, null)
-    this.onStateChange(null)
+    this.commit(null)
   }
 
   async resumeSession(session: Session): Promise<void> {
-    if (!session.isIndefinite) {
-      const remainingMs = (session.startedAt + session.durationMs) - Date.now()
-      if (remainingMs <= 0) {
-        await this.stopSession()
-        return
-      }
+    if (!session.isIndefinite && this.remainingMs(session) <= 0) {
+      await this.stopSession()
+      return
     }
 
     // Restore active state from recovered session
     session.status = 'active'
     session.intent = undefined
+    this.commit(session)
+
+    this.startCountdown(session)
+  }
+
+  /** Persist the journal entry and publish the new state in one step, so the
+   *  on-disk record and the in-memory state can never disagree. */
+  private commit(session: Session | null): void {
     writeSessionAtomic(this.sessionPath, session)
     this.currentSession = session
     this.onStateChange(session)
-
-    if (!session.isIndefinite) {
-      this.timer = new SessionTimer(session.startedAt, session.durationMs)
-      this.timer.start(
-        (_remainingMs) => this.onStateChange({ ...session, status: 'active' }),
-        () => { void this.stopSession() }
-      )
-    }
   }
 
-  setHelperUnavailable(): void {
-    this.setState({ status: 'helper_unavailable' } as Partial<Session>)
+  private remainingMs(session: Session): number {
+    return session.startedAt + session.durationMs - Date.now()
+  }
+
+  /** Timed sessions tick down to an automatic stop; indefinite ones do not. */
+  private startCountdown(session: Session): void {
+    if (session.isIndefinite) return
+
+    this.timer = new SessionTimer(session.startedAt, session.durationMs)
+    this.timer.start(
+      () => this.onStateChange({ ...session, status: 'active' }),
+      () => { void this.stopSession() },
+    )
+  }
+
+  private clearCountdown(): void {
+    this.timer?.stop()
+    this.timer = null
   }
 
   private setState(partial: Partial<Session>): void {
