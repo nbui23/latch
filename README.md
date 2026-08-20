@@ -69,6 +69,24 @@ pnpm lint
 pnpm build:mac
 ```
 
+## Architecture
+
+Latch is a pnpm workspace of four packages:
+
+| Package | Role |
+|---|---|
+| `packages/shared` | Zod schemas for every trust boundary; all cross-process types are inferred from them |
+| `apps/desktop` | Electron main process, preload bridge, and React renderer |
+| `apps/nm-host` | Native messaging proxy between Chromium and the desktop app |
+| `apps/helper-mac` | Privileged Swift LaunchDaemon that owns `/etc/hosts` |
+
+A few rules keep the boundaries honest:
+
+- **Schemas are the source of truth.** `packages/shared/src/schema.ts` defines the wire shapes; `types.ts` infers the static types from them, so a schema and its type cannot drift apart. Every inbound payload is parsed at the boundary it arrives on.
+- **The preload script defines the renderer API.** `apps/desktop/src/main/preload.ts` exports `LatchApi` via `typeof`, and `src/renderer/latch-api.d.ts` types `window.latch` as that. Adding a channel in preload is all the renderer needs.
+- **Commands answer with `IpcResult`.** A discriminated `{ ok: true, data } | { ok: false, error }` union, so callers narrow on `ok` instead of probing optional fields.
+- **State that must survive a crash goes through `writeFileAtomicSync`.** Temp file, fsync, atomic rename — `session.json` is the recovery journal and `apps/desktop/src/main/hosts/crash-recovery.ts` encodes the policy table as an exhaustive switch.
+
 ## Packaging notes
 
 `pnpm build:mac` prepares and packages:
