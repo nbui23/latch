@@ -1,76 +1,60 @@
-// Latch shared types
-// Used by desktop app, NM host, and browser extensions
+/**
+ * Static types for every Latch trust boundary.
+ *
+ * Everything that is validated at runtime is inferred from its schema in
+ * `schema.ts` rather than declared twice — the schema is the source of truth.
+ * Only shapes that never cross a validating boundary are declared by hand.
+ */
 
-export type SessionStatus =
-  | 'idle'
-  | 'starting'
-  | 'active'
-  | 'stopping'
-  | 'recovering'
-  | 'helper_unavailable'
+import type { z } from 'zod'
+import type {
+  AppConfigSchema,
+  AppPreferencesSchema,
+  BlockListSchema,
+  HelperCommandSchema,
+  HelperResponseSchema,
+  IpcSessionStartSchema,
+  NativeMessageFromElectronSchema,
+  NativeMessageToElectronSchema,
+  RecoveryActionSchema,
+  SessionIntentSchema,
+  SessionSchema,
+  SessionStatusSchema,
+  TimerStateSchema,
+} from './schema.js'
 
-export interface BlockedSite {
-  domain: string
-}
+export type SessionStatus = z.infer<typeof SessionStatusSchema>
+export type SessionIntent = z.infer<typeof SessionIntentSchema>
+export type Session = z.infer<typeof SessionSchema>
+export type TimerState = z.infer<typeof TimerStateSchema>
+export type BlockList = z.infer<typeof BlockListSchema>
 
-export interface BlockList {
-  id: string
-  name: string
-  domains: string[]
-  createdAt: number
-}
-
-export interface Session {
-  id: string
-  blocklistId: string
-  domains: string[]
-  startedAt: number
-  durationMs: number
-  isIndefinite?: boolean
-  status: SessionStatus
-  intent?: 'will_write_hosts' | 'will_remove_hosts'
-}
-
-export interface TimerState {
-  remainingMs: number
-  totalMs: number
-  startedAt: number
-}
-
-export type HelperCommand =
-  | { cmd: 'write_block'; domains: string[]; sessionId: string }
-  | { cmd: 'remove_block'; sessionId: string }
-  | { cmd: 'ping' }
-
-export type HelperResponse =
-  | { ok: true }
-  | { ok: false; error: string }
-  | { pong: true }
+export type HelperCommand = z.infer<typeof HelperCommandSchema>
+export type HelperResponse = z.infer<typeof HelperResponseSchema>
 
 // Native messaging messages (extension <-> NM host <-> Electron)
-export type NativeMessageToElectron =
-  | { type: 'get_state' }
-  | { type: 'subscribe_state' }
-
-export type NativeMessageFromElectron =
-  | { type: 'session_state'; payload: Session | null }
-  | { type: 'no_session' }
-  | { type: 'timer_state'; payload: TimerState }
-
+export type NativeMessageToElectron = z.infer<typeof NativeMessageToElectronSchema>
+export type NativeMessageFromElectron = z.infer<typeof NativeMessageFromElectronSchema>
 export type NativeMessage = NativeMessageToElectron | NativeMessageFromElectron
 
 // IPC messages (renderer <-> main)
-export interface IpcSessionStart {
-  blocklistId: string
-  durationMs: number
-  isIndefinite?: boolean
-}
+export type IpcSessionStart = z.infer<typeof IpcSessionStartSchema>
+export type RecoveryAction = z.infer<typeof RecoveryActionSchema>
 
+export type AppPreferences = z.infer<typeof AppPreferencesSchema>
+export type AppConfig = z.infer<typeof AppConfigSchema>
+
+/**
+ * Result of validating user-entered domain text. A discriminated union so a
+ * caller that has checked `valid` gets the matching field without a non-null
+ * assertion — `{ valid: false, normalized: 'x' }` cannot be constructed.
+ */
+export type DomainValidationResult =
+  | { valid: true; normalized: string }
+  | { valid: false; error: string }
+
+/** Crash-recovery snapshot handed to the renderer. Main → renderer only. */
 export interface StaleSessionInfo {
   session: Session | null
   hostsHasMarkers: boolean
 }
-
-export type RecoveryAction = 'resume' | 'cleanup'
-
-export type HelperStatus = 'running' | 'unavailable'

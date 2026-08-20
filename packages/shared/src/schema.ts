@@ -1,8 +1,14 @@
-import { z } from 'zod'
+/**
+ * Runtime contracts for every Latch trust boundary.
+ *
+ * These schemas are the single source of truth for the shapes that cross a
+ * process boundary (renderer ↔ main, extension ↔ NM host ↔ main, main ↔ helper).
+ * The static types in `types.ts` are inferred from them, so a schema change can
+ * never silently drift away from the type the rest of the codebase compiles
+ * against.
+ */
 
-export const BlockedSiteSchema = z.object({
-  domain: z.string().min(1),
-})
+import { z } from 'zod'
 
 export const BlockListSchema = z.object({
   id: z.string().uuid(),
@@ -20,6 +26,8 @@ export const SessionStatusSchema = z.enum([
   'helper_unavailable',
 ])
 
+export const SessionIntentSchema = z.enum(['will_write_hosts', 'will_remove_hosts'])
+
 export const SessionSchema = z.object({
   id: z.string().uuid(),
   blocklistId: z.string().uuid(),
@@ -28,7 +36,13 @@ export const SessionSchema = z.object({
   durationMs: z.number().nonnegative(),
   isIndefinite: z.boolean().optional(),
   status: SessionStatusSchema,
-  intent: z.enum(['will_write_hosts', 'will_remove_hosts']).optional(),
+  intent: SessionIntentSchema.optional(),
+})
+
+export const TimerStateSchema = z.object({
+  remainingMs: z.number(),
+  totalMs: z.number(),
+  startedAt: z.number(),
 })
 
 export const HelperCommandSchema = z.discriminatedUnion('cmd', [
@@ -59,14 +73,11 @@ export const NativeMessageToElectronSchema = z.discriminatedUnion('type', [
 export const NativeMessageFromElectronSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('session_state'), payload: SessionSchema.nullable() }),
   z.object({ type: z.literal('no_session') }),
-  z.object({
-    type: z.literal('timer_state'),
-    payload: z.object({
-      remainingMs: z.number(),
-      totalMs: z.number(),
-      startedAt: z.number(),
-    }),
-  }),
+  z.object({ type: z.literal('timer_state'), payload: TimerStateSchema }),
+  // Emitted by the UI socket and the NM host proxy when an inbound message
+  // cannot be understood. Part of the wire protocol, so receivers can tell a
+  // reported failure apart from an unparseable payload.
+  z.object({ type: z.literal('error'), error: z.string() }),
 ])
 
 export const AppPreferencesSchema = z.object({
@@ -83,6 +94,3 @@ export const AppConfigSchema = z.object({
     showDockIconWhenMenuBarEnabled: false,
   }),
 })
-
-export type AppPreferences = z.infer<typeof AppPreferencesSchema>
-export type AppConfig = z.infer<typeof AppConfigSchema>
