@@ -71,7 +71,7 @@ describe('registerIpcHandlersWith integration', () => {
       domains: ['news.ycombinator.com'],
       createdAt: 1_700_000_000_001,
     })
-    expect(response).toEqual({ ok: true })
+    expect(response).toEqual({ ok: true, data: undefined })
   })
 
   it('rejects an invalid blocklist:save payload without calling the store', async () => {
@@ -83,7 +83,7 @@ describe('registerIpcHandlersWith integration', () => {
     })
 
     expect(configStore.saveBlocklist).not.toHaveBeenCalled()
-    expect(response).toEqual({ error: 'Invalid blocklist payload' })
+    expect(response).toEqual({ ok: false, error: 'Invalid blocklist payload' })
   })
 
   it('rejects malformed session:start payloads before touching session state', async () => {
@@ -93,7 +93,7 @@ describe('registerIpcHandlersWith integration', () => {
     })
 
     expect(sessionManager.startSession).not.toHaveBeenCalled()
-    expect(response).toEqual({ error: 'Invalid session start parameters' })
+    expect(response).toEqual({ ok: false, error: 'Invalid session start parameters' })
   })
 
   it('accepts a valid session:start payload through the IPC boundary', async () => {
@@ -109,6 +109,6 @@ describe('registerIpcHandlersWith integration', () => {
       },
       ['reddit.com'],
     )
-    expect(response).toEqual({ ok: true })
+    expect(response).toEqual({ ok: true, data: undefined })
   })
 })

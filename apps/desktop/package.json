@@ -14,8 +14,6 @@
   },
   "dependencies": {
     "@latch/shared": "workspace:*",
-    "electron-updater": "^6.1.0",
-    "lowdb": "^7.0.1",
     "uuid": "^9.0.1",
     "zod": "^3.22.0"
   },

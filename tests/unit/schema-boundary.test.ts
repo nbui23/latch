@@ -103,6 +103,16 @@ describe('NativeMessageFromElectronSchema (nm-host outbound)', () => {
       NativeMessageFromElectronSchema.safeParse({ type: 'timer_state' }).success
     ).toBe(false)
   })
+
+  it('accepts the error frame emitted for unparseable inbound messages', () => {
+    expect(
+      NativeMessageFromElectronSchema.safeParse({ type: 'error', error: 'Invalid JSON' }).success
+    ).toBe(true)
+  })
+
+  it('rejects an error frame without a reason', () => {
+    expect(NativeMessageFromElectronSchema.safeParse({ type: 'error' }).success).toBe(false)
+  })
 })
 
 describe('IpcSessionStartSchema (session:start IPC boundary)', () => {
