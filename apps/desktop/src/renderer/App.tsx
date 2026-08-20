@@ -4,7 +4,7 @@ import SessionPanel from './components/SessionPanel.js'
 import ExtensionGuide from './components/ExtensionGuide.js'
 import RecoveryDialog from './components/RecoveryDialog.js'
 import { useSession } from './hooks/useSession.js'
-import type { AppPreferences, StaleSessionInfo } from '@latch/shared'
+import type { StaleSessionInfo } from '@latch/shared'
 
 type Tab = 'blocklist' | 'session' | 'setup'
 
@@ -94,33 +94,4 @@ export default function App() {
       )}
     </div>
   )
-}
-
-declare global {
-  interface Window {
-    latch: {
-      session: {
-        getState: () => Promise<unknown>
-        start: (opts: { blocklistId: string; durationMs: number; isIndefinite?: boolean }) => Promise<{ ok?: boolean; error?: string }>
-        stop: () => Promise<{ ok?: boolean; error?: string }>
-        onStateChange: (cb: (s: unknown) => void) => () => void
-        onRecovery: (cb: (info: StaleSessionInfo) => void) => () => void
-        recovery: (action: 'resume' | 'cleanup') => Promise<{ ok?: boolean; error?: string }>
-      }
-      blocklist: {
-        load: () => Promise<unknown[]>
-        save: (bl: unknown) => Promise<{ ok?: boolean; error?: string }>
-      }
-      preferences: {
-        get: () => Promise<AppPreferences>
-        update: (patch: Partial<AppPreferences>) => Promise<{ ok?: boolean; error?: string; preferences?: AppPreferences }>
-      }
-      domain: {
-        validate: (input: string) => Promise<{ valid: boolean; normalized?: string; error?: string }>
-      }
-      helper: {
-        uninstall: () => Promise<{ ok?: boolean; error?: string }>
-      }
-    }
-  }
 }

@@ -51,11 +51,11 @@ export default function ExtensionGuide() {
         showMenuBarIcon: nextValue,
         showDockIconWhenMenuBarEnabled: nextValue ? showDockIconWhenMenuBarEnabled : false,
       })
-      if (result.error) {
+      if (!result.ok) {
         throw new Error(result.error)
       }
-      setShowMenuBarIcon(result.preferences?.showMenuBarIcon ?? nextValue)
-      setShowDockIconWhenMenuBarEnabled(result.preferences?.showDockIconWhenMenuBarEnabled ?? false)
+      setShowMenuBarIcon(result.data.showMenuBarIcon)
+      setShowDockIconWhenMenuBarEnabled(result.data.showDockIconWhenMenuBarEnabled)
       setSettingsState('idle')
     } catch (error) {
       setShowMenuBarIcon(previousMenuBarValue)
@@ -73,11 +73,11 @@ export default function ExtensionGuide() {
 
     try {
       const result = await window.latch.preferences.update({ showDockIconWhenMenuBarEnabled: nextValue })
-      if (result.error) {
+      if (!result.ok) {
         throw new Error(result.error)
       }
-      setShowDockIconWhenMenuBarEnabled(result.preferences?.showDockIconWhenMenuBarEnabled ?? nextValue)
-      setShowMenuBarIcon(result.preferences?.showMenuBarIcon ?? showMenuBarIcon)
+      setShowDockIconWhenMenuBarEnabled(result.data.showDockIconWhenMenuBarEnabled)
+      setShowMenuBarIcon(result.data.showMenuBarIcon)
       setSettingsState('idle')
     } catch (error) {
       setShowDockIconWhenMenuBarEnabled(previousValue)
@@ -91,7 +91,7 @@ export default function ExtensionGuide() {
     setUninstallMessage('')
     try {
       const result = await window.latch.helper.uninstall()
-      if (result.error) {
+      if (!result.ok) {
         setUninstallState('error')
         setUninstallMessage(result.error)
         return

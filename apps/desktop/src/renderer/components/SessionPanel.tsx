@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useSession } from '../hooks/useSession.js'
-import type { BlockList } from '@latch/shared'
+import { useBlocklists } from '../hooks/useBlocklists.js'
+import { formatTime } from '../lib/format-time.js'
 
 const DURATIONS = [
   { label: '15 min', ms: 15 * 60 * 1000 },
@@ -11,36 +12,15 @@ const DURATIONS = [
   { label: '8 hours', ms: 8 * 60 * 60 * 1000 },
 ]
 
-function formatTime(ms: number): string {
-  if (ms <= 0) return '0:00'
-  const totalSecs = Math.ceil(ms / 1000)
-  const h = Math.floor(totalSecs / 3600)
-  const m = Math.floor((totalSecs % 3600) / 60)
-  const s = totalSecs % 60
-  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
-  return `${m}:${String(s).padStart(2, '0')}`
-}
-
 export default function SessionPanel() {
   const { session, startSession, stopSession } = useSession()
+  const { blocklists, selectedId: selectedBlocklistId, setSelectedId: setSelectedBlocklistId } =
+    useBlocklists()
   const [selectedDuration, setSelectedDuration] = useState(DURATIONS[2].ms)
   const [indefinite, setIndefinite] = useState(false)
-  const [blocklists, setBlocklists] = useState<BlockList[]>([])
-  const [selectedBlocklistId, setSelectedBlocklistId] = useState<string>('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [remainingMs, setRemainingMs] = useState(0)
-
-  useEffect(() => {
-    if (typeof window.latch === 'undefined') return
-    window.latch.blocklist.load().then((bls) => {
-      const typed = bls as BlockList[]
-      setBlocklists(typed)
-      if (typed.length > 0 && !selectedBlocklistId) {
-        setSelectedBlocklistId(typed[0].id)
-      }
-    })
-  }, [])
 
   useEffect(() => {
     if (session?.status !== 'active') return
@@ -61,7 +41,7 @@ export default function SessionPanel() {
     setError(null)
     const result = await startSession(selectedBlocklistId, indefinite ? 0 : selectedDuration, indefinite)
     setLoading(false)
-    if (result?.error) setError(result.error)
+    if (!result.ok) setError(result.error)
   }
 
   const handleStop = async () => {
