@@ -1,3 +1,7 @@
+import type { Session, SessionStatus } from '@latch/shared'
+import { isBlockingStatus } from '@latch/shared'
+
+/** What the background worker actually needs to decide whether to block. */
 export interface SessionSnapshot {
   blockedDomains: string[]
   sessionActive: boolean
@@ -5,12 +9,12 @@ export interface SessionSnapshot {
   durationMs: number
 }
 
-export interface SessionPayload {
-  domains?: string[]
-  status?: string
-  startedAt?: number
-  durationMs?: number
-}
+/**
+ * The slice of a desktop `Session` that reaches the extension. Derived from the
+ * shared type rather than restated, so a field rename or a new status shows up
+ * here as a compile error instead of a silently-unmatched string.
+ */
+export type SessionPayload = Partial<Pick<Session, 'domains' | 'status' | 'startedAt' | 'durationMs'>>
 
 export const EMPTY_SESSION_SNAPSHOT: SessionSnapshot = {
   blockedDomains: [],
@@ -29,8 +33,8 @@ export function areSessionSnapshotsEqual(a: SessionSnapshot, b: SessionSnapshot)
   )
 }
 
-export function isBlockingSessionStatus(status: string | undefined): boolean {
-  return status === 'starting' || status === 'active' || status === 'stopping'
+export function isBlockingSessionStatus(status: SessionStatus | undefined): boolean {
+  return isBlockingStatus(status)
 }
 
 export function sessionSnapshotFromPayload(payload: SessionPayload | null): SessionSnapshot {

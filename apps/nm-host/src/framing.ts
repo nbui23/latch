@@ -5,6 +5,8 @@
  * does not execute when these helpers are imported for testing.
  */
 
+import type { NativeMessageFromElectron } from '@latch/shared'
+
 // Chromium caps native-messaging payloads at 1 MiB in each direction.
 // A hostile or buggy caller could otherwise send a length prefix up to 4 GiB.
 export const MAX_NM_MESSAGE_BYTES = 1 * 1024 * 1024
@@ -62,7 +64,7 @@ export function readNativeMessage(
 }
 
 export function writeNativeMessage(
-  msg: object,
+  msg: NativeMessageFromElectron,
   stdout: NodeJS.WritableStream = process.stdout
 ): void {
   const json = JSON.stringify(msg)
