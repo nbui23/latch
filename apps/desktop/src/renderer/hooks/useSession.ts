@@ -7,12 +7,10 @@ export function useSession() {
   useEffect(() => {
     if (typeof window.latch === 'undefined') return
     let cancelled = false
-    const off = window.latch.session.onStateChange((s) => {
-      setSession(s as Session | null)
-    })
+    const off = window.latch.session.onStateChange(setSession)
     void window.latch.session.getState().then((currentSession) => {
       if (!cancelled) {
-        setSession(currentSession as Session | null)
+        setSession(currentSession)
       }
     })
     return () => {
@@ -21,14 +19,10 @@ export function useSession() {
     }
   }, [])
 
-  const startSession = async (blocklistId: string, durationMs: number, isIndefinite?: boolean) => {
-    const result = await window.latch.session.start({ blocklistId, durationMs, isIndefinite })
-    return result
-  }
+  const startSession = (blocklistId: string, durationMs: number, isIndefinite?: boolean) =>
+    window.latch.session.start({ blocklistId, durationMs, isIndefinite })
 
-  const stopSession = async () => {
-    return window.latch.session.stop()
-  }
+  const stopSession = () => window.latch.session.stop()
 
   return { session, startSession, stopSession }
 }

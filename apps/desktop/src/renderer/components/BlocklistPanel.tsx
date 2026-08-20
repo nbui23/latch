@@ -1,27 +1,16 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import type { BlockList } from '@latch/shared'
+import { useBlocklists } from '../hooks/useBlocklists.js'
 
 interface Props {
   sessionActive: boolean
 }
 
 export default function BlocklistPanel({ sessionActive }: Props) {
-  const [blocklists, setBlocklists] = useState<BlockList[]>([])
-  const [selectedId, setSelectedId] = useState<string>('')
+  const { selected: selectedList, save } = useBlocklists()
   const [domainInput, setDomainInput] = useState('')
   const [inputError, setInputError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-
-  useEffect(() => {
-    if (typeof window.latch === 'undefined') return
-    window.latch.blocklist.load().then((bls) => {
-      const typed = bls as BlockList[]
-      setBlocklists(typed)
-      if (typed.length > 0) setSelectedId(typed[0].id)
-    })
-  }, [])
-
-  const selectedList = blocklists.find((b) => b.id === selectedId) ?? null
 
   const handleAddDomain = async () => {
     if (!selectedList || !domainInput.trim()) return
@@ -29,36 +18,36 @@ export default function BlocklistPanel({ sessionActive }: Props) {
 
     const result = await window.latch.domain.validate(domainInput)
     if (!result.valid) {
-      setInputError(result.error ?? 'Invalid domain')
+      setInputError(result.error)
       return
     }
 
-    const domain = result.normalized!
-    if (selectedList.domains.includes(domain)) {
+    if (selectedList.domains.includes(result.normalized)) {
       setInputError('Already in the list')
       return
     }
 
     const updated: BlockList = {
       ...selectedList,
-      domains: [...selectedList.domains, domain],
+      domains: [...selectedList.domains, result.normalized],
     }
 
     setSaving(true)
-    await window.latch.blocklist.save(updated)
+    const saveResult = await save(updated)
     setSaving(false)
-    setBlocklists((prev) => prev.map((b) => (b.id === updated.id ? updated : b)))
+    if (!saveResult.ok) {
+      setInputError(saveResult.error)
+      return
+    }
     setDomainInput('')
   }
 
   const handleRemoveDomain = async (domain: string) => {
     if (!selectedList) return
-    const updated: BlockList = {
+    await save({
       ...selectedList,
       domains: selectedList.domains.filter((d) => d !== domain),
-    }
-    await window.latch.blocklist.save(updated)
-    setBlocklists((prev) => prev.map((b) => (b.id === updated.id ? updated : b)))
+    })
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

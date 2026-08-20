@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
-import type { StaleSessionInfo } from '@latch/shared'
+import type { RecoveryAction, StaleSessionInfo } from '@latch/shared'
+import { formatTime } from '../lib/format-time.js'
 
 interface Props {
   info: StaleSessionInfo
@@ -14,15 +15,15 @@ export default function RecoveryDialog({ info, onClose }: Props) {
     ? Math.max(0, info.session.startedAt + info.session.durationMs - Date.now())
     : 0
 
-  const handleAction = async (action: 'resume' | 'cleanup') => {
+  const handleAction = async (action: RecoveryAction) => {
     setLoading(true)
     setError(null)
     const result = await window.latch.session.recovery(action)
     setLoading(false)
-    if (result?.error) {
-      setError(result.error)
-    } else {
+    if (result.ok) {
       onClose()
+    } else {
+      setError(result.error)
     }
   }
 
@@ -100,14 +101,4 @@ export default function RecoveryDialog({ info, onClose }: Props) {
       </div>
     </div>
   )
-}
-
-function formatTime(ms: number): string {
-  if (ms <= 0) return '0:00'
-  const totalSecs = Math.ceil(ms / 1000)
-  const h = Math.floor(totalSecs / 3600)
-  const m = Math.floor((totalSecs % 3600) / 60)
-  const s = totalSecs % 60
-  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
-  return `${m}:${String(s).padStart(2, '0')}`
 }
