@@ -25,6 +25,11 @@ export type MessageHandler = (
 let server: net.Server | null = null
 const subscribers = new Set<net.Socket>()
 
+/** Every frame on this socket is one newline-delimited JSON message. */
+function writeMessage(socket: net.Socket, message: NativeMessageFromElectron): void {
+  socket.write(JSON.stringify(message) + '\n')
+}
+
 export function getUISocketPath(): string {
   return process.env[UI_SOCKET_ENV] || path.join(os.tmpdir(), 'latch-ui.sock')
 }
@@ -121,14 +126,12 @@ export function startUISocket(onMessage: MessageHandler): void {
       try {
         rawMsg = JSON.parse(msgStr)
       } catch {
-        socket.write(JSON.stringify({ type: 'error', error: 'Invalid JSON' }) + '\n')
+        writeMessage(socket, { type: 'error', error: 'Invalid JSON' })
         return
       }
       const parsed = NativeMessageToElectronSchema.safeParse(rawMsg)
       if (!parsed.success) {
-        socket.write(
-          JSON.stringify({ type: 'error', error: 'Unknown message type' }) + '\n'
-        )
+        writeMessage(socket, { type: 'error', error: 'Unknown message type' })
         return
       }
       const msg: NativeMessageToElectron = parsed.data
@@ -138,12 +141,8 @@ export function startUISocket(onMessage: MessageHandler): void {
       }
 
       onMessage(msg)
-        .then((response) => {
-          socket.write(JSON.stringify(response) + '\n')
-        })
-        .catch(() => {
-          socket.write(JSON.stringify({ type: 'no_session' }) + '\n')
-        })
+        .then((response) => writeMessage(socket, response))
+        .catch(() => writeMessage(socket, { type: 'no_session' }))
     })
     socket.on('close', () => {
       subscribers.delete(socket)
@@ -186,7 +185,8 @@ export function stopUISocket(): void {
 }
 
 export function broadcastUISessionState(session: Session | null): void {
-  const payload = JSON.stringify({ type: 'session_state', payload: session }) + '\n'
+  const message: NativeMessageFromElectron = { type: 'session_state', payload: session }
+  const payload = JSON.stringify(message) + '\n'
 
   for (const socket of subscribers) {
     if (socket.destroyed) {

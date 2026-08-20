@@ -1,7 +1,7 @@
 /**
- * Config store using lowdb (pure JS JSON).
- * Stores blocklists and preferences in config.json.
- * This is NOT the session store — no crash-safety required here.
+ * Config store — blocklists and preferences, persisted to config.json.
+ * This is NOT the session store: losing a preference edit is survivable,
+ * losing the session journal is not.
  */
 
 import * as fs from 'fs'
@@ -10,6 +10,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { app } from 'electron'
 import type { BlockList, AppConfig, AppPreferences } from '@latch/shared'
 import { AppConfigSchema, AppPreferencesSchema } from '@latch/shared'
+import { writeFileAtomicSync } from '../fs/atomic-write.js'
 
 function createDefaultConfig(): AppConfig {
   return {
@@ -49,42 +50,10 @@ export class ConfigStore {
   }
 
   private save(): void {
-    // Atomic write: temp file + fsync + rename. Prevents partial/corrupt
-    // config.json if the process crashes mid-write. Matches the pattern
-    // used for session.json (see session-store.ts).
-    const dir = path.dirname(this.configPath)
-    const tmp = this.configPath + '.tmp'
-    const json = JSON.stringify(this.data, null, 2)
-
-    try {
-      const fd = fs.openSync(tmp, 'w', 0o600)
-      try {
-        fs.writeSync(fd, json)
-        fs.fsyncSync(fd)
-      } finally {
-        fs.closeSync(fd)
-      }
-
-      fs.renameSync(tmp, this.configPath)
-
-      try {
-        const dirFd = fs.openSync(dir, 'r')
-        try {
-          fs.fsyncSync(dirFd)
-        } finally {
-          fs.closeSync(dirFd)
-        }
-      } catch {
-        // best-effort: some filesystems refuse fsync on directories
-      }
-    } catch (error) {
-      try {
-        fs.unlinkSync(tmp)
-      } catch {
-        // ignore cleanup failures
-      }
-      throw error
-    }
+    // config.json is written through the same atomic path as session.json so a
+    // crash mid-write can never leave a truncated file behind (see
+    // ../fs/atomic-write.ts). 0o600: preferences are per-user data.
+    writeFileAtomicSync(this.configPath, JSON.stringify(this.data, null, 2), { mode: 0o600 })
   }
 
   getAllBlocklists(): BlockList[] {
