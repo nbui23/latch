@@ -2,6 +2,7 @@
 // Primary: webNavigation.onErrorOccurred intercepts failed connections and redirects
 // Belt-and-suspenders: declarativeNetRequest dynamic rules block before connection (Chrome only)
 
+import type { NativeMessageToElectron } from '@latch/shared'
 import {
   EMPTY_SESSION_SNAPSHOT,
   buildBlockedUrlRegexFilter,
@@ -9,7 +10,6 @@ import {
   getBlockedHostname,
   sessionSnapshotFromCache,
   sessionSnapshotFromPayload,
-  type SessionPayload,
   type SessionSnapshot,
 } from './session-state'
 import {
@@ -23,10 +23,11 @@ const BLOCKED_PAGE = chrome.runtime.getURL('blocked.html')
 const NM_HOST_ID = 'app.latch'
 const SESSION_CACHE_KEY = 'sessionSnapshot'
 
-let blockedDomains: string[] = []
-let sessionActive = false
-let sessionStartedAt = 0
-let sessionDurationMs = 0
+/**
+ * One snapshot object, not four parallel `let`s that every writer had to
+ * remember to update together.
+ */
+let session: SessionSnapshot = { ...EMPTY_SESSION_SNAPSHOT }
 const pendingBlockedRedirects = new Map<number, string>()
 
 let restoreSessionPromise: Promise<void> | null = null
@@ -36,19 +37,11 @@ function isBlockedPageUrl(url: string): boolean {
 }
 
 function applySessionSnapshot(snapshot: SessionSnapshot): void {
-  blockedDomains = snapshot.blockedDomains
-  sessionActive = snapshot.sessionActive
-  sessionStartedAt = snapshot.startedAt
-  sessionDurationMs = snapshot.durationMs
+  session = { ...snapshot, blockedDomains: [...snapshot.blockedDomains] }
 }
 
 function getSessionSnapshot(): SessionSnapshot {
-  return {
-    blockedDomains: [...blockedDomains],
-    sessionActive,
-    startedAt: sessionStartedAt,
-    durationMs: sessionDurationMs,
-  }
+  return { ...session, blockedDomains: [...session.blockedDomains] }
 }
 
 async function persistSessionSnapshot(): Promise<void> {
@@ -62,7 +55,7 @@ async function restoreSessionSnapshot(): Promise<void> {
   const cached = await chrome.storage.local.get(SESSION_CACHE_KEY)
   applySessionSnapshot(sessionSnapshotFromCache(cached[SESSION_CACHE_KEY]))
 
-  if (sessionActive && blockedDomains.length > 0) {
+  if (session.sessionActive && session.blockedDomains.length > 0) {
     await updateDnrRules()
   }
 }
@@ -89,7 +82,7 @@ async function refreshSessionStateFromNativeHost(): Promise<void> {
 
 function buildTabBlockedPageUrl(originalUrl: string): string | null {
   if (isBlockedPageUrl(originalUrl)) return null
-  const hostname = getBlockedHostname(originalUrl, blockedDomains)
+  const hostname = getBlockedHostname(originalUrl, session.blockedDomains)
   if (!hostname) return null
   return buildBlockedPageUrl(BLOCKED_PAGE, hostname, originalUrl)
 }
@@ -98,7 +91,7 @@ async function getBlockedPageUrlForNavigation(url: string): Promise<string | nul
   await ensureSessionSnapshot()
   let blockedUrl = buildTabBlockedPageUrl(url)
 
-  if (!blockedUrl && !sessionActive) {
+  if (!blockedUrl && !session.sessionActive) {
     await refreshSessionStateFromNativeHost()
     blockedUrl = buildTabBlockedPageUrl(url)
   }
@@ -140,7 +133,7 @@ async function redirectTabToBlockedPage(tabId: number, url: string): Promise<boo
 }
 
 async function syncOpenBlockedTabs(): Promise<void> {
-  if (!sessionActive || blockedDomains.length === 0) return
+  if (!session.sessionActive || session.blockedDomains.length === 0) return
 
   try {
     const tabs = await chrome.tabs.query({})
@@ -237,7 +230,7 @@ function connectNativeHost(): void {
   }
 }
 
-function sendNativeMessage(msg: object): void {
+function sendNativeMessage(msg: NativeMessageToElectron): void {
   if (!nmPort) return
   try {
     nmPort.postMessage(msg)
@@ -255,8 +248,7 @@ async function handleNativeMessage(msg: unknown): Promise<void> {
   const previousSnapshot = getSessionSnapshot()
 
   if (validated.type === 'session_state') {
-    const payload: SessionPayload | null = validated.payload
-    const nextSnapshot = sessionSnapshotFromPayload(payload)
+    const nextSnapshot = sessionSnapshotFromPayload(validated.payload)
     const transitionAction = getSessionTransitionAction(previousSnapshot, nextSnapshot)
     if (transitionAction === 'none') return
 
@@ -285,6 +277,13 @@ async function handleNativeMessage(msg: unknown): Promise<void> {
     applySessionSnapshot({ ...EMPTY_SESSION_SNAPSHOT })
     await Promise.all([persistSessionSnapshot(), updateDnrRules()])
     pendingBlockedRedirects.clear()
+    return
+  }
+
+  if (validated.type === 'error') {
+    // The desktop app or the NM proxy could not understand something we sent.
+    // Leave blocking state alone — a reported failure is not a session update.
+    console.warn('[Latch] Native messaging error:', validated.error)
     return
   }
 
@@ -365,12 +364,16 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
     await ensureSessionSnapshot()
     await refreshSessionStateFromNativeHost()
 
-    if (!sessionActive) {
+    if (!session.sessionActive) {
       sendResponse({ sessionActive: false })
-    } else if (sessionDurationMs === 0) {
+    } else if (session.durationMs === 0) {
       sendResponse({ sessionActive: true, isIndefinite: true })
     } else {
-      sendResponse({ sessionActive: true, startedAt: sessionStartedAt, durationMs: sessionDurationMs })
+      sendResponse({
+        sessionActive: true,
+        startedAt: session.startedAt,
+        durationMs: session.durationMs,
+      })
     }
   })().catch((err) => {
     console.warn('[Latch] Failed to answer blocked-page timer request:', err)
@@ -391,14 +394,14 @@ async function updateDnrRules(): Promise<void> {
   const existing = await chrome.declarativeNetRequest.getDynamicRules()
   const removeIds = existing.map((r) => r.id)
 
-  if (!sessionActive || blockedDomains.length === 0) {
+  if (!session.sessionActive || session.blockedDomains.length === 0) {
     if (removeIds.length > 0) {
       await chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds: removeIds })
     }
     return
   }
 
-  const addRules: chrome.declarativeNetRequest.Rule[] = blockedDomains.map((domain, i) => ({
+  const addRules: chrome.declarativeNetRequest.Rule[] = session.blockedDomains.map((domain, i) => ({
     id: DNR_RULE_ID_BASE + i,
     priority: 1,
     action: {

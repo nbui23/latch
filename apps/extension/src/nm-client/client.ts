@@ -18,11 +18,6 @@ export const NM_HOST_ID = 'app.latch'
 export type NMOutboundMessage = NativeMessageToElectron
 export type NMInboundMessage = NativeMessageFromElectron
 
-// Narrower aliases preserved for call sites that discriminate by `type`.
-export type NMSessionStateMessage = Extract<NMInboundMessage, { type: 'session_state' }>
-export type NMNoSessionMessage = Extract<NMInboundMessage, { type: 'no_session' }>
-export type NMTimerStateMessage = Extract<NMInboundMessage, { type: 'timer_state' }>
-
 export function parseNMMessage(msg: unknown): NMInboundMessage | null {
   const parsed = NativeMessageFromElectronSchema.safeParse(msg)
   return parsed.success ? parsed.data : null
