@@ -1,14 +1,26 @@
 /**
  * IPC bridge — main process handlers for renderer ↔ main communication.
+ *
+ * Every command handler answers with an `IpcResult`, so the renderer narrows on
+ * a single `ok` discriminant instead of probing for an optional `error` field.
+ * Query handlers (`*:get`, `*:load`) return their value directly.
  */
 
-import { ipcMain, BrowserWindow } from 'electron'
+import { ipcMain } from 'electron'
 import { z } from 'zod'
-import type { Session } from '@latch/shared'
+import type {
+  AppPreferences,
+  BlockList,
+  DomainValidationResult,
+  IpcResult,
+  Session,
+} from '@latch/shared'
 import {
   BlockListSchema,
   IpcSessionStartSchema,
   RecoveryActionSchema,
+  ipcFail,
+  ipcOk,
 } from '@latch/shared'
 import type { SessionManager } from '../session/session-manager.js'
 import type { ConfigStore } from '../config/config-store.js'
@@ -46,77 +58,77 @@ export function registerIpcHandlersWith(
   staleSession?: Session | null,
   onPreferencesChanged?: () => void,
 ): void {
-  ipc.handle('session:get-state', () => {
+  ipc.handle('session:get-state', (): Session | null => {
     return sessionManager.getSession()
   })
 
-  ipc.handle('session:start', async (_event, rawOpts) => {
+  ipc.handle('session:start', async (_event, rawOpts): Promise<IpcResult> => {
     const parsed = IpcSessionStartSchema.safeParse(rawOpts)
     if (!parsed.success) {
-      return { error: 'Invalid session start parameters' }
+      return ipcFail('Invalid session start parameters')
     }
     const opts = parsed.data
     const blocklist = configStore.getBlocklist(opts.blocklistId)
     if (!blocklist) {
-      return { error: `Blocklist ${opts.blocklistId} not found` }
+      return ipcFail(`Blocklist ${opts.blocklistId} not found`)
     }
     const domains = blocklist.domains
     if (domains.length === 0) {
-      return { error: 'Blocklist is empty — add some domains first' }
+      return ipcFail('Blocklist is empty — add some domains first')
     }
     try {
       await sessionManager.startSession(opts, domains)
-      return { ok: true }
-    } catch (err: unknown) {
-      return { error: (err as Error).message }
+      return ipcOk()
+    } catch (err) {
+      return ipcFail(err)
     }
   })
 
-  ipc.handle('session:stop', async () => {
+  ipc.handle('session:stop', async (): Promise<IpcResult> => {
     try {
       await sessionManager.stopSession()
-      return { ok: true }
-    } catch (err: unknown) {
-      return { error: (err as Error).message }
+      return ipcOk()
+    } catch (err) {
+      return ipcFail(err)
     }
   })
 
-  ipc.handle('blocklist:load', () => {
+  ipc.handle('blocklist:load', (): BlockList[] => {
     return configStore.getAllBlocklists()
   })
 
-  ipc.handle('blocklist:save', (_event, rawBlocklist) => {
+  ipc.handle('blocklist:save', (_event, rawBlocklist): IpcResult => {
     const parsed = BlockListSchema.safeParse(rawBlocklist)
     if (!parsed.success) {
-      return { error: 'Invalid blocklist payload' }
+      return ipcFail('Invalid blocklist payload')
     }
     try {
       configStore.saveBlocklist(parsed.data)
-      return { ok: true }
-    } catch (err: unknown) {
-      return { error: (err as Error).message }
+      return ipcOk()
+    } catch (err) {
+      return ipcFail(err)
     }
   })
 
-  ipc.handle('preferences:get', () => {
+  ipc.handle('preferences:get', (): AppPreferences => {
     return configStore.getPreferences()
   })
 
-  ipc.handle('preferences:update', (_event, rawPatch) => {
+  ipc.handle('preferences:update', (_event, rawPatch): IpcResult<AppPreferences> => {
     const parsed = AppPreferencesPatchSchema.safeParse(rawPatch ?? {})
     if (!parsed.success) {
-      return { error: 'Invalid preferences patch' }
+      return ipcFail('Invalid preferences patch')
     }
     try {
       const preferences = configStore.updatePreferences(parsed.data)
       onPreferencesChanged?.()
-      return { ok: true, preferences }
-    } catch (err: unknown) {
-      return { error: (err as Error).message }
+      return ipcOk(preferences)
+    } catch (err) {
+      return ipcFail(err)
     }
   })
 
-  ipc.handle('domain:validate', (_event, rawInput) => {
+  ipc.handle('domain:validate', (_event, rawInput): DomainValidationResult => {
     const parsed = z.string().safeParse(rawInput)
     if (!parsed.success) {
       return { valid: false, error: 'Domain must be a string' }
@@ -124,55 +136,39 @@ export function registerIpcHandlersWith(
     return validateDomain(parsed.data)
   })
 
-  ipc.handle('recovery:action', async (_event, rawAction) => {
+  ipc.handle('recovery:action', async (_event, rawAction): Promise<IpcResult> => {
     const parsedAction = RecoveryActionSchema.safeParse(rawAction)
     if (!parsedAction.success) {
-      return { error: 'Unknown recovery action' }
+      return ipcFail('Unknown recovery action')
     }
-    const action = parsedAction.data
-    const sessionPath = sessionManager.getSessionPath()
-    if (action === 'cleanup') {
+
+    if (parsedAction.data === 'cleanup') {
       try {
         await removeBlock('recovery')
       } catch (err) {
         console.error('removeBlock during recovery:', err)
       }
-      writeSessionAtomic(sessionPath, null)
-      return { ok: true }
+      writeSessionAtomic(sessionManager.getSessionPath(), null)
+      return ipcOk()
     }
 
-    if (action === 'resume') {
-      const session = staleSession ?? sessionManager.getSession()
-      if (session) {
-        await sessionManager.resumeSession(session)
-      }
-      return { ok: true }
+    const session = staleSession ?? sessionManager.getSession()
+    if (session) {
+      await sessionManager.resumeSession(session)
     }
-
-    return { error: 'Unknown recovery action' }
+    return ipcOk()
   })
 
-  ipc.handle('helper:uninstall', async () => {
+  ipc.handle('helper:uninstall', async (): Promise<IpcResult> => {
     try {
       if (sessionManager.isActive()) {
         await sessionManager.stopSession()
       }
       uninstallMacHelper()
       unregisterNMHost()
-      return { ok: true }
-    } catch (err: unknown) {
-      return { error: (err as Error).message }
+      return ipcOk()
+    } catch (err) {
+      return ipcFail(err)
     }
   })
-}
-
-export function broadcastSessionState(
-  windows: BrowserWindow[],
-  session: unknown,
-): void {
-  for (const win of windows) {
-    if (!win.isDestroyed()) {
-      win.webContents.send('session:state', session)
-    }
-  }
 }
