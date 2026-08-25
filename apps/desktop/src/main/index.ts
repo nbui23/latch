@@ -46,7 +46,11 @@ const windowManager = new WindowManager({
 // after both are initialised.
 const tray = new TrayController({
   openApp: () => windowManager.show(),
-  stopSession: () => { void sessionManager.stopSession() },
+  stopSession: () => {
+    sessionManager.stopSession().catch((err: unknown) => {
+      console.error('Could not end session:', toErrorMessage(err))
+    })
+  },
   enableAlwaysBlock: () => {
     enableAlwaysBlock().catch((err: unknown) => {
       console.error('Could not enable always-on blocking:', toErrorMessage(err))

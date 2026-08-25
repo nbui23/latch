@@ -46,6 +46,35 @@ async function connectAndExchange(message: string): Promise<string> {
   })
 }
 
+async function connectAndCollect(message: string, expectedMessages: number): Promise<string[]> {
+  const socketPath = getUISocketPath()
+
+  return new Promise((resolve, reject) => {
+    const socket = net.createConnection(socketPath)
+    const messages: string[] = []
+    let buffer = ''
+
+    socket.once('connect', () => {
+      socket.write(message)
+    })
+    socket.on('data', (chunk) => {
+      buffer += chunk.toString('utf8')
+      while (true) {
+        const newline = buffer.indexOf('\n')
+        if (newline === -1) return
+        messages.push(buffer.slice(0, newline))
+        buffer = buffer.slice(newline + 1)
+        if (messages.length === expectedMessages) {
+          socket.destroy()
+          resolve(messages)
+          return
+        }
+      }
+    })
+    socket.once('error', reject)
+  })
+}
+
 beforeEach(() => {
   tempDir = fs.mkdtempSync(path.join('/tmp', 'latch-ui-socket-'))
   process.env.LATCH_UI_SOCKET = path.join(tempDir, 'ui.sock')
@@ -148,5 +177,23 @@ describe('ui socket', () => {
     await expect(received).resolves.toBe(
       '{"type":"session_state","payload":{"id":"550e8400-e29b-41d4-a716-446655440030","blocklistId":"550e8400-e29b-41d4-a716-446655440031","domains":["reddit.com"],"startedAt":1700000000000,"durationMs":60000,"isIndefinite":false,"status":"active"}}',
     )
+  })
+
+  it('processes multiple newline-delimited requests delivered in one chunk', async () => {
+    startUISocket(async (msg) => {
+      if (msg.type === 'get_state') {
+        return { type: 'no_session' }
+      }
+      return { type: 'timer_state', payload: { remainingMs: 1, totalMs: 2, startedAt: 3 } }
+    })
+
+    await waitFor(() => fs.existsSync(getUISocketPath()))
+
+    await expect(
+      connectAndCollect('{"type":"get_state"}\n{"type":"subscribe_state"}\n', 2),
+    ).resolves.toEqual([
+      '{"type":"no_session"}',
+      '{"type":"timer_state","payload":{"remainingMs":1,"totalMs":2,"startedAt":3}}',
+    ])
   })
 })

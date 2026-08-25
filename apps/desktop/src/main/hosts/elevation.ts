@@ -11,11 +11,37 @@ import * as os from 'os'
 import { app } from 'electron'
 
 export function getResourcesPath(): string {
-  if (app.isPackaged) {
+  const override = process.env.LATCH_RESOURCES_PATH
+  if (override) {
+    return override
+  }
+  if (app?.isPackaged) {
     return process.resourcesPath
   }
   // dev: resources/ dir relative to apps/desktop
   return path.join(__dirname, '..', '..', '..', 'resources')
+}
+
+function requireExistingPath(filePath: string, label: string): void {
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`Missing ${label} at ${filePath}`)
+  }
+}
+
+function createTempScript(prefix: string, lines: string[]): { tempDir: string; scriptPath: string } {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), `${prefix}-`))
+  const scriptPath = path.join(tempDir, 'run.sh')
+  fs.writeFileSync(scriptPath, lines.join('\n') + '\n', { mode: 0o700 })
+  return { tempDir, scriptPath }
+}
+
+function runPrivilegedScript(prefix: string, lines: string[]): void {
+  const { tempDir, scriptPath } = createTempScript(prefix, lines)
+  try {
+    execSync(`osascript -e 'do shell script quoted form of "${scriptPath}" with administrator privileges'`)
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true })
+  }
 }
 
 export function installMacHelper(): void {
@@ -27,6 +53,8 @@ export function installMacHelper(): void {
   // Dev layout:       resources/helper-mac/latch-helper
   const helperBin = path.join(src, 'helper-mac', 'latch-helper')
   const plist = path.join(src, 'helper-mac', 'com.latch.helper.plist')
+  requireExistingPath(helperBin, 'helper binary')
+  requireExistingPath(plist, 'helper plist')
 
   // P0-5: bootout before bootstrap so reinstall/upgrade is idempotent.
   // P0-6: Write commands to a temp shell script — no inline osascript quoting needed.
@@ -41,15 +69,7 @@ export function installMacHelper(): void {
     `launchctl bootstrap system /Library/LaunchDaemons/com.latch.helper.plist`,
   ]
 
-  // Use a fixed /tmp path — no spaces, no special chars, always writable on macOS
-  const tmpScript = path.join(os.tmpdir(), 'latch-install.sh')
-  try {
-    fs.writeFileSync(tmpScript, scriptLines.join('\n') + '\n', { mode: 0o755 })
-    // Single osascript -e with clean path — no inline shell escaping required
-    execSync(`osascript -e 'do shell script "${tmpScript}" with administrator privileges'`)
-  } finally {
-    try { fs.unlinkSync(tmpScript) } catch { /* ignore — best-effort cleanup */ }
-  }
+  runPrivilegedScript('latch-install', scriptLines)
 }
 
 export function isHelperInstalled(): boolean {
@@ -66,11 +86,5 @@ export function uninstallMacHelper(): void {
     `rm -f "${plist}"`,
     `rm -f "${binary}"`,
   ]
-  const tmpScript = path.join(os.tmpdir(), 'latch-uninstall.sh')
-  try {
-    fs.writeFileSync(tmpScript, scriptLines.join('\n') + '\n', { mode: 0o755 })
-    execSync(`osascript -e 'do shell script "${tmpScript}" with administrator privileges'`)
-  } finally {
-    try { fs.unlinkSync(tmpScript) } catch { /* ignore */ }
-  }
+  runPrivilegedScript('latch-uninstall', scriptLines)
 }
