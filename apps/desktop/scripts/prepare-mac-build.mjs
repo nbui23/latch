@@ -6,7 +6,6 @@ import { fileURLToPath } from 'url'
 const scriptDir = dirname(fileURLToPath(import.meta.url))
 const desktopRoot = resolve(scriptDir, '..')
 const repoRoot = resolve(desktopRoot, '..', '..')
-const sharedRoot = join(repoRoot, 'packages', 'shared')
 const helperRoot = join(repoRoot, 'apps', 'helper-mac')
 const extensionRoot = join(repoRoot, 'apps', 'extension')
 const nmHostRoot = join(repoRoot, 'apps', 'nm-host')
@@ -96,7 +95,6 @@ if (existsSync(defaultElectronIcon) && !existsSync(iconPath)) {
   copyFileSync(defaultElectronIcon, iconPath)
 }
 
-run('pnpm', ['build'], sharedRoot)
 run('swift', ['build', '-c', 'release'], helperRoot)
 
 const compiledHelper = join(helperRoot, '.build', 'release', 'LatchHelper')

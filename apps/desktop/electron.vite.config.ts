@@ -3,7 +3,7 @@ import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()],
+    plugins: [externalizeDepsPlugin({ exclude: ['@latch/shared'] })],
     build: {
       outDir: 'dist/main',
       rollupOptions: {
@@ -12,7 +12,7 @@ export default defineConfig({
     },
   },
   preload: {
-    plugins: [externalizeDepsPlugin()],
+    plugins: [externalizeDepsPlugin({ exclude: ['@latch/shared'] })],
     build: {
       outDir: 'dist/preload',
       rollupOptions: {
