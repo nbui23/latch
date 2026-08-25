@@ -6,7 +6,6 @@ import {
   buildBlockedUrlRegexFilter,
   buildBlockedPageUrl,
   getBlockedHostname,
-  isBlockingSessionStatus,
   sessionSnapshotFromCache,
   sessionSnapshotFromPayload,
 } from './session-state'
@@ -57,12 +56,12 @@ describe('sessionSnapshotFromPayload', () => {
   })
 })
 
-describe('isBlockingSessionStatus', () => {
+describe('blocking statuses reaching the background worker', () => {
   it('keeps starting, active, and stopping sessions in blocking mode', () => {
-    expect(isBlockingSessionStatus('starting')).toBe(true)
-    expect(isBlockingSessionStatus('active')).toBe(true)
-    expect(isBlockingSessionStatus('stopping')).toBe(true)
-    expect(isBlockingSessionStatus('idle')).toBe(false)
+    for (const status of ['starting', 'active', 'stopping'] as const) {
+      expect(sessionSnapshotFromPayload({ status, domains: ['reddit.com'] }).sessionActive).toBe(true)
+    }
+    expect(sessionSnapshotFromPayload({ status: 'idle', domains: ['reddit.com'] }).sessionActive).toBe(false)
   })
 })
 

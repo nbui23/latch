@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Session } from '@latch/shared'
-import { getTrayMenuBarTitle, getTrayStatusLabel, getTrayVisualState, isBlockingVisibleInTray } from './tray-state.js'
+import { getTrayMenuBarTitle, getTrayStatusLabel, getTrayVisualState } from './tray-state.js'
 
 function makeSession(overrides: Partial<Session> = {}): Session {
   return {
@@ -16,14 +16,15 @@ function makeSession(overrides: Partial<Session> = {}): Session {
 
 describe('tray state helpers', () => {
   it('treats starting and active sessions as visible tray blocking states', () => {
-    expect(isBlockingVisibleInTray(makeSession({ status: 'starting' }))).toBe(true)
-    expect(isBlockingVisibleInTray(makeSession({ status: 'active' }))).toBe(true)
+    expect(getTrayVisualState(makeSession({ status: 'starting' }))).toBe('active')
+    expect(getTrayVisualState(makeSession({ status: 'active' }))).toBe('active')
+    expect(getTrayMenuBarTitle(makeSession({ status: 'starting' }))).toBe('● L')
   })
 
   it('treats sessions without blocked domains as inactive', () => {
     const session = makeSession({ status: 'active', domains: [] })
-    expect(isBlockingVisibleInTray(session)).toBe(false)
     expect(getTrayVisualState(session)).toBe('inactive')
+    expect(getTrayMenuBarTitle(session)).toBe('L')
   })
 
   it('returns native-facing status labels for active, stopping, and idle states', () => {

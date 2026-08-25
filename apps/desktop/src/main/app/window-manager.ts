@@ -59,13 +59,6 @@ export class WindowManager {
     win.focus()
   }
 
-  restoreIfMinimized(): void {
-    const win = this.liveWindow
-    if (win?.isMinimized()) {
-      win.restore()
-    }
-  }
-
   syncDockVisibility(): void {
     if (process.platform !== 'darwin' || !app.isReady() || this.quitting) return
 

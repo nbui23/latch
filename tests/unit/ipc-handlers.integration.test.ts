@@ -1,5 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { registerIpcHandlersWith } from '../../apps/desktop/src/main/ipc/handlers.js'
+import { removeBlock } from '../../apps/desktop/src/main/hosts/hosts-manager.js'
+import { writeSessionAtomic } from '../../apps/desktop/src/main/session/session-store.js'
+
+// recovery:action reaches the helper and the journal for real; stub both so the
+// test asserts the decision, not the side effects.
+vi.mock('../../apps/desktop/src/main/hosts/hosts-manager.js', () => ({
+  removeBlock: vi.fn(async () => undefined),
+}))
+vi.mock('../../apps/desktop/src/main/session/session-store.js', () => ({
+  writeSessionAtomic: vi.fn(),
+}))
 
 const handlers = new Map<string, (event: unknown, payload?: unknown) => unknown>()
 
@@ -110,5 +121,42 @@ describe('registerIpcHandlersWith integration', () => {
       ['reddit.com'],
     )
     expect(response).toEqual({ ok: true, data: undefined })
+  })
+
+  it('recovery cleanup removes the block and clears the journal', async () => {
+    const response = await invoke('recovery:action', 'cleanup')
+
+    expect(removeBlock).toHaveBeenCalledWith('recovery')
+    expect(writeSessionAtomic).toHaveBeenCalledWith('/tmp/latch-session.json', null)
+    expect(sessionManager.resumeSession).not.toHaveBeenCalled()
+    expect(response).toEqual({ ok: true, data: undefined })
+  })
+
+  it('recovery resume restores the session without touching the block', async () => {
+    const stale = {
+      id: '550e8400-e29b-41d4-a716-446655440030',
+      blocklistId: '550e8400-e29b-41d4-a716-446655440020',
+      domains: ['reddit.com'],
+      startedAt: 1_700_000_000_000,
+      durationMs: 60_000,
+      status: 'active' as const,
+    }
+    sessionManager.getSession.mockReturnValueOnce(stale as never)
+
+    const response = await invoke('recovery:action', 'resume')
+
+    expect(sessionManager.resumeSession).toHaveBeenCalledWith(stale)
+    expect(removeBlock).not.toHaveBeenCalled()
+    expect(writeSessionAtomic).not.toHaveBeenCalled()
+    expect(response).toEqual({ ok: true, data: undefined })
+  })
+
+  it('rejects an unknown recovery action without acting on either path', async () => {
+    const response = await invoke('recovery:action', 'destroy-everything')
+
+    expect(removeBlock).not.toHaveBeenCalled()
+    expect(writeSessionAtomic).not.toHaveBeenCalled()
+    expect(sessionManager.resumeSession).not.toHaveBeenCalled()
+    expect(response).toEqual({ ok: false, error: 'Unknown recovery action' })
   })
 })

@@ -13,12 +13,10 @@ export const BLOCKING_SESSION_STATUSES = ['starting', 'active', 'stopping'] as c
 
 export type BlockingSessionStatus = (typeof BLOCKING_SESSION_STATUSES)[number]
 
-const BLOCKING_LOOKUP: ReadonlySet<string> = new Set(BLOCKING_SESSION_STATUSES)
-
 export function isBlockingStatus(
   status: SessionStatus | undefined,
 ): status is BlockingSessionStatus {
-  return status !== undefined && BLOCKING_LOOKUP.has(status)
+  return BLOCKING_SESSION_STATUSES.includes(status as BlockingSessionStatus)
 }
 
 /**
