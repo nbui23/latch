@@ -142,21 +142,26 @@ export function registerIpcHandlersWith(
       return ipcFail('Unknown recovery action')
     }
 
-    if (parsedAction.data === 'cleanup') {
-      try {
-        await removeBlock('recovery')
-      } catch (err) {
-        console.error('removeBlock during recovery:', err)
+    // Exhaustive over RecoveryAction: a new action fails the build here rather
+    // than silently taking the resume path.
+    switch (parsedAction.data) {
+      case 'cleanup': {
+        try {
+          await removeBlock('recovery')
+        } catch (err) {
+          console.error('removeBlock during recovery:', err)
+        }
+        writeSessionAtomic(sessionManager.getSessionPath(), null)
+        return ipcOk()
       }
-      writeSessionAtomic(sessionManager.getSessionPath(), null)
-      return ipcOk()
+      case 'resume': {
+        const session = staleSession ?? sessionManager.getSession()
+        if (session) {
+          await sessionManager.resumeSession(session)
+        }
+        return ipcOk()
+      }
     }
-
-    const session = staleSession ?? sessionManager.getSession()
-    if (session) {
-      await sessionManager.resumeSession(session)
-    }
-    return ipcOk()
   })
 
   ipc.handle('helper:uninstall', async (): Promise<IpcResult> => {

@@ -3,12 +3,8 @@ import { isBlockingSession } from '@latch/shared'
 
 export type TrayVisualState = 'inactive' | 'active'
 
-export function isBlockingVisibleInTray(session: Session | null): boolean {
-  return isBlockingSession(session)
-}
-
 export function getTrayVisualState(session: Session | null): TrayVisualState {
-  return isBlockingVisibleInTray(session) ? 'active' : 'inactive'
+  return isBlockingSession(session) ? 'active' : 'inactive'
 }
 
 export function getTrayStatusLabel(session: Session | null, now = Date.now()): string {
@@ -39,7 +35,7 @@ export function getTrayStatusLabel(session: Session | null, now = Date.now()): s
 }
 
 export function getTrayMenuBarTitle(session: Session | null): string {
-  return isBlockingVisibleInTray(session) ? '● L' : 'L'
+  return isBlockingSession(session) ? '● L' : 'L'
 }
 
 export function createTraySvg(state: TrayVisualState): string {

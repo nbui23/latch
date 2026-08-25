@@ -8,20 +8,20 @@
 import { Menu, Tray, nativeImage } from 'electron'
 import * as path from 'path'
 import type { Session } from '@latch/shared'
+import { isBlockingSession } from '@latch/shared'
 import {
   createTraySvg,
   getTrayMenuBarTitle,
   getTrayStatusLabel,
   getTrayVisualState,
-  isBlockingVisibleInTray,
   type TrayVisualState,
 } from '../tray-state.js'
 
 const TRAY_ICON_SIZE = { width: 18, height: 18 }
 
 export interface TrayActions {
+  /** Surfaces the main window — both "Open Latch" and "Start Focus Session…". */
   openApp: () => void
-  startSession: () => void
   stopSession: () => void
   enableAlwaysBlock: () => void
   quit: () => void
@@ -86,14 +86,14 @@ export class TrayController {
   }
 
   private buildSessionItems(session: Session | null): Electron.MenuItemConstructorOptions[] {
-    const isBlocking = isBlockingVisibleInTray(session)
+    const isBlocking = isBlockingSession(session)
     const canStop = isBlocking && session?.status !== 'stopping'
     const items: Electron.MenuItemConstructorOptions[] = []
 
     if (isBlocking) {
       items.push({ label: 'End Session', enabled: canStop, click: this.actions.stopSession })
     } else {
-      items.push({ label: 'Start Focus Session…', click: this.actions.startSession })
+      items.push({ label: 'Start Focus Session…', click: this.actions.openApp })
     }
 
     const isIndefinite = session?.status === 'active' && session.isIndefinite === true

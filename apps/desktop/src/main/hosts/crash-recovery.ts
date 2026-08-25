@@ -29,10 +29,11 @@ export type RecoveryPolicy =
   | { action: 'dialog'; requiresDialog: true }
   | { action: 'none'; requiresDialog: false }
 
-const AUTO_CLEAN: RecoveryPolicy = { action: 'auto-clean', requiresDialog: false }
-const RESET: RecoveryPolicy = { action: 'reset', requiresDialog: false }
-const DIALOG: RecoveryPolicy = { action: 'dialog', requiresDialog: true }
-const NONE: RecoveryPolicy = { action: 'none', requiresDialog: false }
+// Frozen: these are shared instances handed straight back to every caller.
+const AUTO_CLEAN = Object.freeze<RecoveryPolicy>({ action: 'auto-clean', requiresDialog: false })
+const RESET = Object.freeze<RecoveryPolicy>({ action: 'reset', requiresDialog: false })
+const DIALOG = Object.freeze<RecoveryPolicy>({ action: 'dialog', requiresDialog: true })
+const NONE = Object.freeze<RecoveryPolicy>({ action: 'none', requiresDialog: false })
 
 export interface StaleSessionDetection extends StaleSessionInfo {
   policy: RecoveryPolicy

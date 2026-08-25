@@ -1,4 +1,4 @@
-import type { Session, SessionStatus } from '@latch/shared'
+import type { Session } from '@latch/shared'
 import { isBlockingStatus } from '@latch/shared'
 
 /** What the background worker actually needs to decide whether to block. */
@@ -33,12 +33,8 @@ export function areSessionSnapshotsEqual(a: SessionSnapshot, b: SessionSnapshot)
   )
 }
 
-export function isBlockingSessionStatus(status: SessionStatus | undefined): boolean {
-  return isBlockingStatus(status)
-}
-
 export function sessionSnapshotFromPayload(payload: SessionPayload | null): SessionSnapshot {
-  if (isBlockingSessionStatus(payload?.status) && Array.isArray(payload?.domains) && payload.domains.length > 0) {
+  if (isBlockingStatus(payload?.status) && Array.isArray(payload?.domains) && payload.domains.length > 0) {
     return {
       blockedDomains: payload.domains,
       sessionActive: true,

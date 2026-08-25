@@ -46,7 +46,6 @@ const windowManager = new WindowManager({
 // after both are initialised.
 const tray = new TrayController({
   openApp: () => windowManager.show(),
-  startSession: () => windowManager.show(),
   stopSession: () => { void sessionManager.stopSession() },
   enableAlwaysBlock: () => {
     enableAlwaysBlock().catch((err: unknown) => {
@@ -150,7 +149,6 @@ async function recoverStaleSession() {
 }
 
 app.on('second-instance', () => {
-  windowManager.restoreIfMinimized()
   windowManager.show()
 })
 

@@ -3,9 +3,10 @@
  *
  * State transitions:
  *   idle → starting → active → stopping → idle
- *        ↓                              ↑
- *   helper_unavailable ────────────────→ (error path)
  *   recovering → idle (after cleanup)
+ *
+ * A down helper is an error, not a state: startSession throws and the renderer
+ * shows the message. There is no session object to hang a status on yet.
  *
  * Write-ahead ordering:
  *   Start: write session(starting+intent) → helper.write_block → write session(active)
@@ -53,7 +54,6 @@ export class SessionManager {
 
     const helperOk = await isHelperRunning()
     if (!helperOk) {
-      this.setState({ status: 'helper_unavailable' })
       throw new Error(
         'Focus helper is not running. Restart Latch to restore it.'
       )
@@ -146,12 +146,5 @@ export class SessionManager {
   private clearCountdown(): void {
     this.timer?.stop()
     this.timer = null
-  }
-
-  private setState(partial: Partial<Session>): void {
-    if (this.currentSession) {
-      this.currentSession = { ...this.currentSession, ...partial }
-      this.onStateChange(this.currentSession)
-    }
   }
 }
