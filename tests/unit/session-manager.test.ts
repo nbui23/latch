@@ -149,6 +149,36 @@ describe('SessionManager', () => {
       expect(mockRemoveBlock).not.toHaveBeenCalled()
       expect(mockWriteSessionAtomic).not.toHaveBeenCalled()
     })
+
+    it('preserves stopping journal state when helper remove_block fails', async () => {
+      await manager.startSession({ blocklistId: 'list-1', durationMs: 60_000 }, ['reddit.com'])
+      stateChanges.length = 0
+      mockWriteSessionAtomic.mockClear()
+      mockRemoveBlock.mockRejectedValueOnce(new Error('helper down'))
+
+      await expect(manager.stopSession()).rejects.toThrow(/helper down/i)
+
+      expect(mockWriteSessionAtomic).toHaveBeenCalledTimes(1)
+      expect(mockWriteSessionAtomic).toHaveBeenCalledWith(
+        '/tmp/latch-test/session.json',
+        expect.objectContaining({
+          status: 'stopping',
+          intent: 'will_remove_hosts',
+        }),
+      )
+      expect(manager.getSession()).toEqual(
+        expect.objectContaining({
+          status: 'stopping',
+          intent: 'will_remove_hosts',
+        }),
+      )
+      expect(stateChanges).toEqual([
+        expect.objectContaining({
+          status: 'stopping',
+          intent: 'will_remove_hosts',
+        }),
+      ])
+    })
   })
 
   describe('resumeSession', () => {
@@ -204,6 +234,9 @@ describe('SessionManager', () => {
 
       await manager.resumeSession(session)
       expect(manager.isActive()).toBe(false)
+      expect(mockRemoveBlock).toHaveBeenCalledWith('expired-id')
+      expect(mockWriteSessionAtomic).toHaveBeenCalledWith('/tmp/latch-test/session.json', null)
+      expect(stateChanges[stateChanges.length - 1]).toBeNull()
     })
   })
 

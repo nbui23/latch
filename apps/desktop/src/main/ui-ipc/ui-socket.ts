@@ -117,32 +117,37 @@ export function startUISocket(onMessage: MessageHandler): void {
     let buf = ''
     socket.on('data', (chunk) => {
       buf += chunk.toString('utf8')
-      const nl = buf.indexOf('\n')
-      if (nl === -1) return
-      const msgStr = buf.slice(0, nl)
-      buf = buf.slice(nl + 1)
+      // Drain every newline-delimited frame in the chunk: a pipelined client
+      // can put several in one write, and returning after the first stranded
+      // the rest in `buf` until more data happened to arrive.
+      while (true) {
+        const nl = buf.indexOf('\n')
+        if (nl === -1) return
+        const msgStr = buf.slice(0, nl)
+        buf = buf.slice(nl + 1)
 
-      let rawMsg: unknown
-      try {
-        rawMsg = JSON.parse(msgStr)
-      } catch {
-        writeMessage(socket, { type: 'error', error: 'Invalid JSON' })
-        return
-      }
-      const parsed = NativeMessageToElectronSchema.safeParse(rawMsg)
-      if (!parsed.success) {
-        writeMessage(socket, { type: 'error', error: 'Unknown message type' })
-        return
-      }
-      const msg: NativeMessageToElectron = parsed.data
+        let rawMsg: unknown
+        try {
+          rawMsg = JSON.parse(msgStr)
+        } catch {
+          writeMessage(socket, { type: 'error', error: 'Invalid JSON' })
+          continue
+        }
+        const parsed = NativeMessageToElectronSchema.safeParse(rawMsg)
+        if (!parsed.success) {
+          writeMessage(socket, { type: 'error', error: 'Unknown message type' })
+          continue
+        }
+        const msg: NativeMessageToElectron = parsed.data
 
-      if (msg.type === 'subscribe_state') {
-        subscribers.add(socket)
-      }
+        if (msg.type === 'subscribe_state') {
+          subscribers.add(socket)
+        }
 
-      onMessage(msg)
-        .then((response) => writeMessage(socket, response))
-        .catch(() => writeMessage(socket, { type: 'no_session' }))
+        onMessage(msg)
+          .then((response) => writeMessage(socket, response))
+          .catch(() => writeMessage(socket, { type: 'no_session' }))
+      }
     })
     socket.on('close', () => {
       subscribers.delete(socket)

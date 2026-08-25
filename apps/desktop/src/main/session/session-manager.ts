@@ -95,11 +95,13 @@ export class SessionManager {
     session.intent = 'will_remove_hosts'
     this.commit(session)
 
-    // Step 2: call helper
+    // Step 2: call helper. A failure here must NOT fall through to step 3:
+    // the journal stays at `stopping` so crash recovery finishes the job.
     try {
       await removeBlock(session.id)
     } catch (err) {
       console.error('Helper remove_block failed:', err)
+      throw err instanceof Error ? err : new Error(String(err))
     }
 
     // Step 3: mark idle
@@ -107,8 +109,10 @@ export class SessionManager {
   }
 
   async resumeSession(session: Session): Promise<void> {
+    // A recovered session is not in `currentSession` yet, so stopSession()
+    // would return early and leave the hosts entries in place.
     if (!session.isIndefinite && this.remainingMs(session) <= 0) {
-      await this.stopSession()
+      await this.cleanupExpiredRecoveredSession(session)
       return
     }
 
@@ -139,12 +143,34 @@ export class SessionManager {
     this.timer = new SessionTimer(session.startedAt, session.durationMs)
     this.timer.start(
       () => this.onStateChange({ ...session, status: 'active' }),
-      () => { void this.stopSession() },
+      () => {
+        this.stopSession().catch((err: unknown) => {
+          console.error('Automatic stop at end of session failed:', err)
+        })
+      },
     )
   }
 
   private clearCountdown(): void {
     this.timer?.stop()
     this.timer = null
+  }
+
+  /**
+   * Clears a recovered session that already expired. Unlike stopSession() this
+   * takes the session as an argument, because recovery has not adopted it into
+   * `currentSession`. Best-effort: there is no user waiting on the result, and
+   * leftover markers are re-detected on the next launch.
+   */
+  private async cleanupExpiredRecoveredSession(session: Session): Promise<void> {
+    this.clearCountdown()
+
+    try {
+      await removeBlock(session.id)
+    } catch (err) {
+      console.error('Helper remove_block failed while clearing expired recovered session:', err)
+    }
+
+    this.commit(null)
   }
 }

@@ -44,8 +44,32 @@ export class ConfigStore {
       const raw = fs.readFileSync(this.configPath, 'utf8')
       const parsed = JSON.parse(raw)
       return AppConfigSchema.parse(parsed)
-    } catch {
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code
+      if (code === 'ENOENT') {
+        return createDefaultConfig()
+      }
+
+      this.preserveInvalidConfig(error)
       return createDefaultConfig()
+    }
+  }
+
+  private preserveInvalidConfig(error: unknown): void {
+    const backupPath = `${this.configPath}.invalid-${Date.now()}`
+
+    try {
+      fs.renameSync(this.configPath, backupPath)
+      console.warn(
+        `[config-store] Invalid config at ${this.configPath}; moved to ${backupPath}:`,
+        error,
+      )
+    } catch (renameError) {
+      console.warn(
+        `[config-store] Invalid config at ${this.configPath}; failed to preserve bad file:`,
+        error,
+        renameError,
+      )
     }
   }
 

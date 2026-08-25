@@ -19,13 +19,23 @@ afterEach(() => {
 
 describe('ConfigStore', () => {
   it('loads defaults when config on disk is invalid', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     fs.writeFileSync(configPath, '{not-json')
 
     const store = new ConfigStore(configPath)
     const [blocklist] = store.getAllBlocklists()
+    const preservedFiles = fs
+      .readdirSync(tempDir)
+      .filter((name) => name.startsWith('config.json.invalid-'))
 
     expect(blocklist.name).toBe('Default')
     expect(store.getPreferences().defaultDurationMs).toBe(2 * 60 * 60 * 1000)
+    expect(fs.existsSync(configPath)).toBe(false)
+    expect(preservedFiles).toHaveLength(1)
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('[config-store] Invalid config'),
+      expect.anything(),
+    )
   })
 
   it('writes config atomically and leaves no temp file behind on success', () => {
