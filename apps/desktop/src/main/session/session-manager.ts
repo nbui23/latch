@@ -136,19 +136,20 @@ export class SessionManager {
     return session.startedAt + session.durationMs - Date.now()
   }
 
-  /** Timed sessions tick down to an automatic stop; indefinite ones do not. */
+  /**
+   * Timed sessions tick down to an automatic stop; indefinite ones do not.
+   * Nothing is published while it counts down: the remaining time is a pure
+   * function of startedAt + durationMs, which every consumer already holds.
+   */
   private startCountdown(session: Session): void {
     if (session.isIndefinite) return
 
     this.timer = new SessionTimer(session.startedAt, session.durationMs)
-    this.timer.start(
-      () => this.onStateChange({ ...session, status: 'active' }),
-      () => {
-        this.stopSession().catch((err: unknown) => {
-          console.error('Automatic stop at end of session failed:', err)
-        })
-      },
-    )
+    this.timer.start(() => {
+      this.stopSession().catch((err: unknown) => {
+        console.error('Automatic stop at end of session failed:', err)
+      })
+    })
   }
 
   private clearCountdown(): void {

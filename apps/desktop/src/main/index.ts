@@ -20,7 +20,7 @@ import { installMacHelper, isHelperInstalled } from './hosts/elevation.js'
 import { TrayController } from './app/tray-controller.js'
 import { WindowManager } from './app/window-manager.js'
 import { toErrorMessage } from '@latch/shared'
-import type { NativeMessageFromElectron, NativeMessageToElectron, Session } from '@latch/shared'
+import type { NativeMessageFromElectron } from '@latch/shared'
 
 if (!app.requestSingleInstanceLock()) {
   app.quit()
@@ -59,36 +59,11 @@ const tray = new TrayController({
   quit: () => { app.quit() },
 })
 
-/**
- * The extension only needs to hear about changes it can act on, so pushes are
- * keyed on the fields it reads — a per-second timer tick is not one of them.
- */
-function getBroadcastSessionKey(session: Session | null): string {
-  return JSON.stringify(
-    session
-      ? {
-          id: session.id,
-          status: session.status,
-          domains: session.domains,
-          startedAt: session.startedAt,
-          durationMs: session.durationMs,
-          isIndefinite: session.isIndefinite,
-        }
-      : null,
-  )
-}
-
-let lastBroadcastSessionKey: string | null = null
-
+// Only real state transitions land here — the countdown no longer publishes —
+// so every one of these is news to all three consumers.
 const sessionManager = new SessionManager((session) => {
   windowManager.send('session:state', session)
-
-  const broadcastKey = getBroadcastSessionKey(session)
-  if (broadcastKey !== lastBroadcastSessionKey) {
-    broadcastUISessionState(session)
-    lastBroadcastSessionKey = broadcastKey
-  }
-
+  broadcastUISessionState(session)
   tray.update(session)
 })
 
@@ -193,12 +168,13 @@ app.whenReady().then(async () => {
     await promptHelperInstall()
   }
 
-  startUISocket(async (msg: NativeMessageToElectron): Promise<NativeMessageFromElectron> => {
-    if (msg.type === 'get_state') {
-      return { type: 'session_state', payload: sessionManager.getSession() }
-    }
-    return { type: 'no_session' }
-  })
+  // Both inbound message types mean "tell me the state now"; subscribe_state
+  // also registers the socket for the broadcasts that follow. Answering it with
+  // `no_session` mid-session left a cold-cache extension unable to block.
+  startUISocket(async (): Promise<NativeMessageFromElectron> => ({
+    type: 'session_state',
+    payload: sessionManager.getSession(),
+  }))
 
   const stale = await recoverStaleSession()
 

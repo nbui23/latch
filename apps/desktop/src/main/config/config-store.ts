@@ -98,11 +98,6 @@ export class ConfigStore {
     this.save()
   }
 
-  deleteBlocklist(id: string): void {
-    this.data.blocklists = this.data.blocklists.filter((blocklist) => blocklist.id !== id)
-    this.save()
-  }
-
   getPreferences(): AppPreferences {
     return { ...this.data.preferences }
   }

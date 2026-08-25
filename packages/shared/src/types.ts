@@ -20,13 +20,11 @@ import type {
   SessionIntentSchema,
   SessionSchema,
   SessionStatusSchema,
-  TimerStateSchema,
 } from './schema.js'
 
 export type SessionStatus = z.infer<typeof SessionStatusSchema>
 export type SessionIntent = z.infer<typeof SessionIntentSchema>
 export type Session = z.infer<typeof SessionSchema>
-export type TimerState = z.infer<typeof TimerStateSchema>
 export type BlockList = z.infer<typeof BlockListSchema>
 
 export type HelperCommand = z.infer<typeof HelperCommandSchema>

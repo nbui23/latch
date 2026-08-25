@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
-import { useSession } from '../hooks/useSession.js'
-import { useBlocklists } from '../hooks/useBlocklists.js'
+import type { BlockList, Session } from '@latch/shared'
+import type { useSession } from '../hooks/useSession.js'
 import { formatTime } from '../lib/format-time.js'
 
 const DURATIONS = [
@@ -12,10 +12,23 @@ const DURATIONS = [
   { label: '8 hours', ms: 8 * 60 * 60 * 1000 },
 ]
 
-export default function SessionPanel() {
-  const { session, startSession, stopSession } = useSession()
-  const { blocklists, selectedId: selectedBlocklistId, setSelectedId: setSelectedBlocklistId } =
-    useBlocklists()
+interface Props {
+  session: Session | null
+  startSession: ReturnType<typeof useSession>['startSession']
+  stopSession: ReturnType<typeof useSession>['stopSession']
+  blocklists: BlockList[]
+  selectedBlocklistId: string
+  onSelectBlocklist: (id: string) => void
+}
+
+export default function SessionPanel({
+  session,
+  startSession,
+  stopSession,
+  blocklists,
+  selectedBlocklistId,
+  onSelectBlocklist,
+}: Props) {
   const [selectedDuration, setSelectedDuration] = useState(DURATIONS[2].ms)
   const [indefinite, setIndefinite] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -31,7 +44,9 @@ export default function SessionPanel() {
     update()
     const id = setInterval(update, 1000)
     return () => clearInterval(id)
-  }, [session])
+    // Only the timing fields matter — keying on the object would rebuild the
+    // interval on every unrelated push.
+  }, [session?.id, session?.status, session?.startedAt, session?.durationMs])
 
   const isActive = session?.status === 'active'
 
@@ -53,37 +68,23 @@ export default function SessionPanel() {
   if (isActive && session) {
     return (
       <div>
-        <div style={{
-          background: '#1a1a1a', border: '1px solid #2c2c2c', borderRadius: 12, padding: 32,
-          textAlign: 'center', marginBottom: 16,
-        }}>
-          <div style={{ fontSize: 12, color: '#888888', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>
-            Focus session active
-          </div>
+        <div className="session-card">
+          <div className="session-card__label">Focus session active</div>
           {session.isIndefinite ? (
-            <div style={{ fontSize: 20, fontWeight: 700, marginTop: 8, color: '#e5e5e5' }}>Blocking active — no end time</div>
+            <div className="session-card__open">Blocking active — no end time</div>
           ) : (
             <>
-              <div style={{ fontSize: 56, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: '#e5e5e5' }}>
-                {formatTime(remainingMs)}
-              </div>
-              <div style={{ fontSize: 13, color: '#666666', marginTop: 8 }}>remaining</div>
+              <div className="session-card__time">{formatTime(remainingMs)}</div>
+              <div className="session-card__remaining">remaining</div>
             </>
           )}
         </div>
 
-        <button
-          onClick={handleStop}
-          disabled={loading}
-          style={{
-            width: '100%', padding: '12px 0', background: '#dc2626', color: '#fff',
-            border: 'none', borderRadius: 8, fontSize: 15, fontWeight: 600, cursor: 'pointer',
-          }}
-        >
+        <button className="btn btn--danger btn--stop" onClick={handleStop} disabled={loading}>
           {loading ? 'Ending...' : 'End Session Early'}
         </button>
 
-        <p style={{ marginTop: 12, fontSize: 12, color: '#666666', textAlign: 'center' }}>
+        <p className="session-note">
           Sites on your block list are blocked across all browsers.
         </p>
       </div>
@@ -92,20 +93,14 @@ export default function SessionPanel() {
 
   return (
     <div>
-      <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 16, color: '#e5e5e5' }}>Start a Focus Session</h2>
+      <h2 className="panel-title panel-title--spaced">Start a Focus Session</h2>
 
-      <div style={{ marginBottom: 16 }}>
-        <label style={{ display: 'block', fontSize: 13, fontWeight: 500, marginBottom: 6, color: '#888888' }}>
-          Block list
-        </label>
+      <div className="field">
+        <label className="field__label">Block list</label>
         <select
+          className="select"
           value={selectedBlocklistId}
-          onChange={(e) => setSelectedBlocklistId(e.target.value)}
-          style={{
-            width: '100%', padding: '8px 12px', borderRadius: 6,
-            border: '1px solid #2c2c2c', fontSize: 14,
-            background: '#1a1a1a', color: '#e5e5e5',
-          }}
+          onChange={(e) => onSelectBlocklist(e.target.value)}
         >
           {blocklists.map((bl) => (
             <option key={bl.id} value={bl.id}>
@@ -118,8 +113,8 @@ export default function SessionPanel() {
         </select>
       </div>
 
-      <div style={{ marginBottom: 16 }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 500, color: '#888888', cursor: 'pointer' }}>
+      <div className="field">
+        <label className="checkbox-label">
           <input
             type="checkbox"
             checked={indefinite}
@@ -130,23 +125,14 @@ export default function SessionPanel() {
       </div>
 
       {!indefinite && (
-        <div style={{ marginBottom: 20 }}>
-          <label style={{ display: 'block', fontSize: 13, fontWeight: 500, marginBottom: 8, color: '#888888' }}>
-            Duration
-          </label>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+        <div className="durations">
+          <label className="field__label">Duration</label>
+          <div className="durations__grid">
             {DURATIONS.map((d) => (
               <button
                 key={d.ms}
+                className={selectedDuration === d.ms ? 'duration is-selected' : 'duration'}
                 onClick={() => setSelectedDuration(d.ms)}
-                style={{
-                  padding: '10px 0', borderRadius: 6, border: '2px solid',
-                  borderColor: selectedDuration === d.ms ? '#3b82f6' : '#2c2c2c',
-                  background: selectedDuration === d.ms ? '#1e2a3a' : '#1a1a1a',
-                  color: selectedDuration === d.ms ? '#3b82f6' : '#888888',
-                  fontWeight: selectedDuration === d.ms ? 600 : 400,
-                  cursor: 'pointer', fontSize: 13,
-                }}
               >
                 {d.label}
               </button>
@@ -155,20 +141,12 @@ export default function SessionPanel() {
         </div>
       )}
 
-      {error && (
-        <div style={{ background: '#2a1515', border: '1px solid #7f1d1d', borderRadius: 6, padding: '10px 14px', marginBottom: 16, color: '#f87171', fontSize: 13 }}>
-          {error}
-        </div>
-      )}
+      {error && <div className="callout callout--error">{error}</div>}
 
       <button
+        className="btn btn--primary btn--start"
         onClick={handleStart}
         disabled={loading || blocklists.length === 0}
-        style={{
-          width: '100%', padding: '14px 0', background: '#2563eb', color: '#fff',
-          border: 'none', borderRadius: 8, fontSize: 16, fontWeight: 700, cursor: 'pointer',
-          opacity: loading || blocklists.length === 0 ? 0.5 : 1,
-        }}
       >
         {loading ? 'Starting...' : '▶  Start Focus Session'}
       </button>

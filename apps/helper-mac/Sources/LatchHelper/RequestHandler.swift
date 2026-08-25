@@ -89,7 +89,6 @@ enum DispatchResult: Equatable {
     case ok
     case error(String)
     case pong
-    case silent
 }
 
 func sendJSON<T: Encodable>(fd: Int32, value: T) {
@@ -194,8 +193,6 @@ func handleClientConnection(
             sendJSON(fd: clientFd, value: PongResponse(pong: true))
         case .error(let msg):
             sendJSON(fd: clientFd, value: ErrorResponse(ok: false, error: msg))
-        case .silent:
-            return
         }
     }
 }

@@ -1,0 +1,642 @@
+/*
+ * The whole renderer is dark; the palette lives here and nowhere else so a
+ * colour is changed in one place instead of five components.
+ */
+:root {
+  --bg: #0e0e0e;
+  --bg-raised: #111111;
+  --surface: #1a1a1a;
+  --surface-alt: #151515;
+  --surface-code: #222222;
+  --border: #2c2c2c;
+
+  --text: #e5e5e5;
+  --text-body: #aaaaaa;
+  --text-muted: #888888;
+  --text-dim: #666666;
+  --text-faint: #555555;
+
+  --accent: #3b82f6;
+  --accent-strong: #2563eb;
+  --accent-surface: #1e2a3a;
+
+  --info-border: #1d4ed8;
+  --info-text: #93c5fd;
+
+  --danger: #dc2626;
+  --danger-surface: #2a1515;
+  --danger-border: #7f1d1d;
+  --danger-text: #f87171;
+
+  --warn-surface: #2a1f00;
+  --warn-border: #78350f;
+  --warn-text: #fbbf24;
+
+  --ok-surface: #0f2318;
+  --ok-border: #166534;
+  --ok-text: #4ade80;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+}
+
+/* Shell */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--bg);
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--bg-raised);
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.brand-mark {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: linear-gradient(180deg, #182133 0%, #111827 100%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.app-title {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.app-tagline {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+.tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.tab {
+  padding: 10px 20px;
+  border: none;
+  background: transparent;
+  border-bottom: 2px solid transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.tab.is-active {
+  border-bottom-color: var(--accent);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.app-body {
+  flex: 1;
+  overflow: auto;
+  padding: 20px;
+  background: var(--bg);
+}
+
+/* Shared bits */
+
+.panel-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 4px;
+  color: var(--text);
+}
+
+.panel-title--spaced {
+  margin-bottom: 16px;
+}
+
+.panel-note {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-bottom: 16px;
+}
+
+.panel-note--lead {
+  margin-bottom: 20px;
+}
+
+.panel-note--tight {
+  margin-bottom: 12px;
+}
+
+.btn {
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn--primary {
+  background: var(--accent-strong);
+}
+
+.btn--danger {
+  background: var(--danger);
+}
+
+.btn--muted {
+  background: var(--surface-code);
+  color: var(--text-body);
+  border: 1px solid var(--border);
+}
+
+.btn--start {
+  width: 100%;
+  padding: 14px 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.btn--start:disabled {
+  opacity: 0.5;
+}
+
+.btn--stop {
+  width: 100%;
+  padding: 12px 0;
+  font-size: 15px;
+}
+
+.btn--add {
+  padding: 8px 16px;
+  border-radius: 6px;
+}
+
+/* Dimmed while the list is locked or saving, but not merely because the
+   input is empty — that state stays lit. */
+.btn--add.is-dimmed {
+  opacity: 0.4;
+}
+
+.btn--modal {
+  padding: 11px 0;
+  font-size: 14px;
+}
+
+.btn--modal:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.callout {
+  border: 1px solid;
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  font-size: 13px;
+}
+
+.callout--error {
+  background: var(--danger-surface);
+  border-color: var(--danger-border);
+  color: var(--danger-text);
+}
+
+.callout--warn {
+  background: var(--warn-surface);
+  border-color: var(--warn-border);
+  color: var(--warn-text);
+  padding: 8px 12px;
+}
+
+.callout--ok {
+  background: var(--ok-surface);
+  border-color: var(--ok-border);
+  color: var(--ok-text);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 20px;
+}
+
+.callout--info {
+  background: var(--accent-surface);
+  border-color: var(--info-border);
+  color: var(--info-text);
+  border-radius: 8px;
+}
+
+/* Focus session */
+
+.session-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 32px;
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+.session-card__label {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.session-card__open {
+  font-size: 20px;
+  font-weight: 700;
+  margin-top: 8px;
+  color: var(--text);
+}
+
+.session-card__time {
+  font-size: 56px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.session-card__remaining {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-top: 8px;
+}
+
+.session-note {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+.field {
+  margin-bottom: 16px;
+}
+
+.field__label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 6px;
+  color: var(--text-muted);
+}
+
+.select {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  font-size: 14px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.durations {
+  margin-bottom: 20px;
+}
+
+.durations .field__label {
+  margin-bottom: 8px;
+}
+
+.durations__grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.duration {
+  padding: 10px 0;
+  border-radius: 6px;
+  border: 2px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.duration.is-selected {
+  border-color: var(--accent);
+  background: var(--accent-surface);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* Block list */
+
+.domain-form {
+  display: flex;
+  gap: 8px;
+  margin: 16px 0;
+}
+
+.domain-input {
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  font-size: 14px;
+  outline: none;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.domain-input:disabled {
+  background: var(--bg-raised);
+}
+
+.domain-input.is-invalid {
+  border-color: var(--danger-border);
+}
+
+.field-error {
+  color: var(--danger-text);
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+.empty-state {
+  color: var(--text-faint);
+  font-size: 14px;
+  text-align: center;
+  padding: 32px 0;
+}
+
+.domain-list {
+  list-style: none;
+}
+
+.domain-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: var(--surface);
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  margin-bottom: 6px;
+}
+
+.domain-row__name {
+  font-size: 14px;
+  color: var(--text);
+}
+
+.domain-row__remove {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-faint);
+  font-size: 18px;
+  line-height: 1;
+  padding: 0 4px;
+}
+
+.list-footnote {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+/* Setup tab */
+
+.settings-card {
+  margin-bottom: 28px;
+  padding: 16px;
+  border-radius: 12px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+}
+
+.settings-card .panel-title {
+  margin-bottom: 6px;
+}
+
+.settings-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  cursor: pointer;
+}
+
+.settings-row--dock {
+  margin-top: 14px;
+}
+
+.settings-row.is-busy {
+  cursor: wait;
+}
+
+.settings-row.is-locked {
+  cursor: not-allowed;
+}
+
+.settings-row.is-faded {
+  opacity: 0.55;
+}
+
+.settings-row__checkbox {
+  margin-top: 2px;
+}
+
+.settings-row__title {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.settings-row__hint {
+  display: block;
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.settings-status {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.settings-status.is-error {
+  color: var(--danger-text);
+}
+
+.step {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.step__number {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--accent-surface);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.step__body {
+  font-size: 14px;
+  color: var(--text-body);
+  padding-top: 4px;
+}
+
+.step__body strong {
+  color: var(--text);
+}
+
+.code {
+  background: var(--surface-code);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: monospace;
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.guide-note {
+  margin-top: 16px;
+  background: #1f1a00;
+  border: 1px solid var(--warn-border);
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-size: 12px;
+  color: var(--warn-text);
+}
+
+.guide-section {
+  margin-top: 28px;
+  border-top: 1px solid var(--border);
+  padding-top: 20px;
+}
+
+.guide-section__title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: var(--text);
+}
+
+.uninstall-status {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--ok-text);
+}
+
+.uninstall-status.is-error {
+  color: var(--danger-text);
+}
+
+.btn--uninstall {
+  padding: 9px 14px;
+  border: 1px solid var(--danger-border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--danger-text);
+  font-size: 13px;
+}
+
+.btn--uninstall:disabled {
+  background: var(--danger-surface);
+  cursor: wait;
+}
+
+/* Recovery dialog */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 28px;
+  max-width: 380px;
+  width: 90%;
+}
+
+.modal__icon {
+  font-size: 28px;
+  margin-bottom: 8px;
+}
+
+.modal__title {
+  font-size: 17px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  color: var(--text);
+}
+
+.modal__text {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+  line-height: 1.5;
+}
+
+.modal .callout--error {
+  padding: 8px 12px;
+  margin-bottom: 12px;
+}
+
+.modal__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.modal__footnote {
+  margin-top: 12px;
+  font-size: 11px;
+  color: var(--text-faint);
+  text-align: center;
+}

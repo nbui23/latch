@@ -98,7 +98,7 @@ describe('NativeMessageFromElectronSchema (nm-host outbound)', () => {
     ).toBe(false)
   })
 
-  it('rejects timer_state without payload', () => {
+  it('rejects unknown type', () => {
     expect(
       NativeMessageFromElectronSchema.safeParse({ type: 'timer_state' }).success
     ).toBe(false)

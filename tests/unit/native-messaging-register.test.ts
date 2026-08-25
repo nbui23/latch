@@ -55,6 +55,16 @@ describe('native messaging host registration', () => {
     vi.restoreAllMocks()
   })
 
+  it('resolves the dev host binary inside apps/nm-host/dist', async () => {
+    const registerModule = await import('../../apps/desktop/src/main/native-messaging/register.js')
+
+    // Passed explicitly because vitest's __dirname is the source directory, while the
+    // bundled main process runs from apps/desktop/dist/main.
+    expect(registerModule.getNMHostBinaryPath(join('/latch', 'apps', 'desktop', 'dist', 'main'))).toBe(
+      join('/latch', 'apps', 'nm-host', 'dist', 'latch-nm-host'),
+    )
+  })
+
   it('registers a clean-install manifest with the stable and legacy origins', async () => {
     const registerModule = await import('../../apps/desktop/src/main/native-messaging/register.js')
     const expectedPath = registerModule.getChromeNativeMessagingManifestStatus().expected.path

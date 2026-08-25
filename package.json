@@ -4,12 +4,14 @@
   "private": true,
   "description": "Latch — macOS focus blocker",
   "license": "MIT",
+  "engines": {
+    "node": "20.x"
+  },
   "scripts": {
     "brand:assets": "node scripts/generate-brand-assets.mjs",
     "lint": "eslint .",
     "typecheck": "pnpm -r typecheck",
     "test": "vitest run",
-    "test:e2e": "playwright test",
     "build:mac": "pnpm --filter desktop build:mac",
     "dev": "pnpm --filter desktop dev"
   },
@@ -25,7 +27,6 @@
     "eslint": "^8.57.0",
     "prettier": "^3.2.0",
     "typescript": "^5.4.0",
-    "vitest": "^1.6.0",
-    "@playwright/test": "^1.44.0"
+    "vitest": "^1.6.0"
   }
 }
