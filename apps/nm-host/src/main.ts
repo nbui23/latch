@@ -26,6 +26,10 @@ const NO_SESSION_MSG: NativeMessageFromElectron = { type: 'no_session' }
 let subscriptionSocket: net.Socket | null = null
 let subscriptionBuffer = ''
 let subscriptionRetryTimer: ReturnType<typeof setTimeout> | null = null
+let subscriptionRetryCount = 0
+
+const SUBSCRIPTION_RETRY_BASE_MS = 1000
+const SUBSCRIPTION_RETRY_MAX_MS = 60_000
 
 function connectToElectron(): Promise<net.Socket> {
   return new Promise((resolve, reject) => {
@@ -46,12 +50,25 @@ async function connectWithRetry(attempts = 3, delayMs = 500): Promise<net.Socket
   return null
 }
 
-function scheduleSubscriptionRetry(delayMs = 1000): void {
+/**
+ * A desktop app that is down stays down for hours, so a fixed one-second retry
+ * is a busy loop with a socket on the end of it. Back off to a minute and stay
+ * there; the browser is not waiting on this, and the next launch is caught
+ * within that minute either way.
+ */
+function scheduleSubscriptionRetry(): void {
   if (subscriptionRetryTimer) return
+
+  const delay = Math.min(
+    SUBSCRIPTION_RETRY_BASE_MS * Math.pow(2, subscriptionRetryCount),
+    SUBSCRIPTION_RETRY_MAX_MS,
+  )
+  subscriptionRetryCount++
+
   subscriptionRetryTimer = setTimeout(() => {
     subscriptionRetryTimer = null
     void ensureStateSubscription()
-  }, delayMs)
+  }, delay)
 }
 
 function resetSubscription(): void {
@@ -91,12 +108,17 @@ function handleSubscriptionData(chunk: Buffer): void {
 async function ensureStateSubscription(): Promise<void> {
   if (subscriptionSocket) return
 
-  const socket = await connectWithRetry()
-  if (!socket) {
+  // One attempt per scheduled retry: the backoff above IS the retry policy, and
+  // nesting connectWithRetry inside it just triples the connects per round.
+  let socket: net.Socket
+  try {
+    socket = await connectToElectron()
+  } catch {
     scheduleSubscriptionRetry()
     return
   }
 
+  subscriptionRetryCount = 0
   subscriptionSocket = socket
   subscriptionBuffer = ''
 

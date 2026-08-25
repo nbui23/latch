@@ -1,14 +1,16 @@
-import XCTest
+import Testing
 import Foundation
 import Darwin
 @testable import LatchHelper
 
-final class RequestHandlerTests: XCTestCase {
-    private var tempDirectoryURL: URL!
-    private var hostsURL: URL!
-    private var manager: HostsFileManager!
+/// A class suite, not a struct: swift-testing makes one instance per test, so
+/// `init`/`deinit` are the per-test fixture — and only a class can have a deinit.
+@Suite final class RequestHandlerTests {
+    private let tempDirectoryURL: URL
+    private let hostsURL: URL
+    private let manager: HostsFileManager
 
-    override func setUpWithError() throws {
+    init() throws {
         tempDirectoryURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: tempDirectoryURL, withIntermediateDirectories: true)
@@ -19,10 +21,8 @@ final class RequestHandlerTests: XCTestCase {
         manager = HostsFileManager(hostsURL: hostsURL)
     }
 
-    override func tearDownWithError() throws {
-        if let tempDirectoryURL {
-            try? FileManager.default.removeItem(at: tempDirectoryURL)
-        }
+    deinit {
+        try? FileManager.default.removeItem(at: tempDirectoryURL)
     }
 
     // MARK: - readRequestWithCap
@@ -44,6 +44,15 @@ final class RequestHandlerTests: XCTestCase {
         }
     }
 
+    /// JSONEncoder does not promise key order, and the Electron client parses
+    /// rather than string-matches, so assert on the fields — not the bytes.
+    private func decodeResponse(_ line: String) -> [String: Any] {
+        guard let data = line.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return [:] }
+        return object
+    }
+
     private func readLine(from fd: Int32) -> String {
         var collected = Data()
         var byte: UInt8 = 0
@@ -58,7 +67,7 @@ final class RequestHandlerTests: XCTestCase {
         return String(data: collected, encoding: .utf8) ?? ""
     }
 
-    func testReadRequestWithCapReadsWholeLine() throws {
+    @Test func readRequestWithCapReadsWholeLine() throws {
         let (a, b) = try makeSocketPair()
         defer { close(a); close(b) }
 
@@ -70,12 +79,12 @@ final class RequestHandlerTests: XCTestCase {
 
         let result = readRequestWithCap(fd: a, maxBytes: 1024)
         guard case .ok(let buf) = result else {
-            XCTFail("expected .ok, got \(result)"); return
+            Issue.record("expected .ok, got \(result)"); return
         }
-        XCTAssertEqual(String(data: buf, encoding: .utf8), "{\"cmd\":\"ping\"}\n")
+        #expect(String(data: buf, encoding: .utf8) == "{\"cmd\":\"ping\"}\n")
     }
 
-    func testReadRequestWithCapRejectsOversize() throws {
+    @Test func readRequestWithCapRejectsOversize() throws {
         let (a, b) = try makeSocketPair()
         defer { close(a); close(b) }
 
@@ -87,10 +96,10 @@ final class RequestHandlerTests: XCTestCase {
         close(b)
 
         let result = readRequestWithCap(fd: a, maxBytes: 1024)
-        XCTAssertEqual(result, .oversized)
+        #expect(result == .oversized)
     }
 
-    func testReadRequestWithCapTimesOutWhenPeerStalls() throws {
+    @Test func readRequestWithCapTimesOutWhenPeerStalls() throws {
         let (a, b) = try makeSocketPair()
         defer { close(a); close(b) }
 
@@ -103,32 +112,32 @@ final class RequestHandlerTests: XCTestCase {
         let result = readRequestWithCap(fd: a, maxBytes: 1024)
         let elapsed = Date().timeIntervalSince(start)
 
-        XCTAssertLessThan(elapsed, 2.0, "recv should have unblocked well under 2s, took \(elapsed)")
-        XCTAssertEqual(result, .timedOut)
+        #expect(elapsed < 2.0, "recv should have unblocked well under 2s, took \(elapsed)")
+        #expect(result == .timedOut)
     }
 
     // MARK: - dispatchRequest
 
-    func testDispatchPing() {
+    @Test func dispatchPing() {
         let buf = "{\"cmd\":\"ping\"}".data(using: .utf8)!
-        XCTAssertEqual(dispatchRequest(buffer: buf, manager: manager), .pong)
+        #expect(dispatchRequest(buffer: buf, manager: manager) == .pong)
     }
 
-    func testDispatchRejectsInvalidJSON() {
+    @Test func dispatchRejectsInvalidJSON() {
         let buf = "not json".data(using: .utf8)!
-        XCTAssertEqual(dispatchRequest(buffer: buf, manager: manager), .error("Invalid JSON"))
+        #expect(dispatchRequest(buffer: buf, manager: manager) == .error("Invalid JSON"))
     }
 
-    func testDispatchRejectsUnknownCommand() {
+    @Test func dispatchRejectsUnknownCommand() {
         let buf = "{\"cmd\":\"rm -rf\"}".data(using: .utf8)!
         if case .error(let msg) = dispatchRequest(buffer: buf, manager: manager) {
-            XCTAssertTrue(msg.contains("Unknown command"))
+            #expect(msg.contains("Unknown command"))
         } else {
-            XCTFail("expected error")
+            Issue.record("expected error")
         }
     }
 
-    func testDispatchRejectsInjectedDomain() {
+    @Test func dispatchRejectsInjectedDomain() {
         // Classic /etc/hosts newline-smuggling attempt.
         let payload: [String: Any] = [
             "cmd": "write_block",
@@ -137,42 +146,39 @@ final class RequestHandlerTests: XCTestCase {
         ]
         let buf = try! JSONSerialization.data(withJSONObject: payload)
         if case .error(let msg) = dispatchRequest(buffer: buf, manager: manager) {
-            XCTAssertFalse(msg.isEmpty)
+            #expect(!msg.isEmpty)
         } else {
-            XCTFail("expected error on injected domain")
+            Issue.record("expected error on injected domain")
         }
         // /etc/hosts surrogate must remain untouched.
         let content = (try? String(contentsOf: hostsURL, encoding: .utf8)) ?? ""
-        XCTAssertFalse(content.contains("bank.com"))
+        #expect(!content.contains("bank.com"))
     }
 
-    func testDispatchRejectsInvalidSessionId() {
+    @Test func dispatchRejectsInvalidSessionId() {
         let payload: [String: Any] = [
             "cmd": "write_block",
             "domains": ["reddit.com"],
             "sessionId": "abc\ndef",
         ]
         let buf = try! JSONSerialization.data(withJSONObject: payload)
-        XCTAssertEqual(
-            dispatchRequest(buffer: buf, manager: manager),
-            .error("Invalid sessionId")
-        )
+        #expect(dispatchRequest(buffer: buf, manager: manager) == .error("Invalid sessionId"))
     }
 
-    func testDispatchWriteBlockSuccess() throws {
+    @Test func dispatchWriteBlockSuccess() throws {
         let payload: [String: Any] = [
             "cmd": "write_block",
             "domains": ["reddit.com"],
             "sessionId": "550e8400-e29b-41d4-a716-446655440000",
         ]
         let buf = try JSONSerialization.data(withJSONObject: payload)
-        XCTAssertEqual(dispatchRequest(buffer: buf, manager: manager), .ok)
+        #expect(dispatchRequest(buffer: buf, manager: manager) == .ok)
 
         let content = try String(contentsOf: hostsURL, encoding: .utf8)
-        XCTAssertTrue(content.contains("127.0.0.1 reddit.com"))
+        #expect(content.contains("127.0.0.1 reddit.com"))
     }
 
-    func testDispatchRemoveBlockSuccess() throws {
+    @Test func dispatchRemoveBlockSuccess() throws {
         // Seed a block first.
         try manager.writeBlock(domains: ["reddit.com"])
 
@@ -181,25 +187,26 @@ final class RequestHandlerTests: XCTestCase {
             "sessionId": "550e8400-e29b-41d4-a716-446655440000",
         ]
         let buf = try JSONSerialization.data(withJSONObject: payload)
-        XCTAssertEqual(dispatchRequest(buffer: buf, manager: manager), .ok)
+        #expect(dispatchRequest(buffer: buf, manager: manager) == .ok)
 
         let content = try String(contentsOf: hostsURL, encoding: .utf8)
-        XCTAssertFalse(content.contains("# Latch block"))
+        #expect(!content.contains("# Latch block"))
     }
 
     // MARK: - handleClientConnection
 
-    func testHandleClientConnectionReturnsPongOverSocket() throws {
+    @Test func handleClientConnectionReturnsPongOverSocket() throws {
         let (serverFd, clientFd) = try makeSocketPair()
         defer { close(clientFd) }
 
         let payload = "{\"cmd\":\"ping\"}\n".data(using: .utf8)!
         let group = DispatchGroup()
         group.enter()
+        let manager = self.manager
         DispatchQueue.global(qos: .userInitiated).async {
             handleClientConnection(
                 clientFd: serverFd,
-                manager: self.manager,
+                manager: manager,
                 maxRequestBytes: 1024,
                 recvTimeout: timeval(tv_sec: 1, tv_usec: 0)
             )
@@ -208,21 +215,22 @@ final class RequestHandlerTests: XCTestCase {
 
         writeAll(payload, to: clientFd)
         let response = readLine(from: clientFd)
-        XCTAssertEqual(group.wait(timeout: .now() + 2), .success)
+        #expect(group.wait(timeout: .now() + 2) == .success)
 
-        XCTAssertEqual(response, "{\"pong\":true}\n")
+        #expect(response == "{\"pong\":true}\n")
     }
 
-    func testHandleClientConnectionRejectsMalformedJSONOverSocket() throws {
+    @Test func handleClientConnectionRejectsMalformedJSONOverSocket() throws {
         let (serverFd, clientFd) = try makeSocketPair()
         defer { close(clientFd) }
 
         let group = DispatchGroup()
         group.enter()
+        let manager = self.manager
         DispatchQueue.global(qos: .userInitiated).async {
             handleClientConnection(
                 clientFd: serverFd,
-                manager: self.manager,
+                manager: manager,
                 maxRequestBytes: 1024,
                 recvTimeout: timeval(tv_sec: 1, tv_usec: 0)
             )
@@ -231,21 +239,24 @@ final class RequestHandlerTests: XCTestCase {
 
         writeAll("not-json\n".data(using: .utf8)!, to: clientFd)
         let response = readLine(from: clientFd)
-        XCTAssertEqual(group.wait(timeout: .now() + 2), .success)
+        #expect(group.wait(timeout: .now() + 2) == .success)
 
-        XCTAssertEqual(response, "{\"ok\":false,\"error\":\"Invalid JSON\"}\n")
+        let body = decodeResponse(response)
+        #expect(body["ok"] as? Bool == false)
+        #expect(body["error"] as? String == "Invalid JSON")
     }
 
-    func testHandleClientConnectionRejectsOversizedRequestOverSocket() throws {
+    @Test func handleClientConnectionRejectsOversizedRequestOverSocket() throws {
         let (serverFd, clientFd) = try makeSocketPair()
         defer { close(clientFd) }
 
         let group = DispatchGroup()
         group.enter()
+        let manager = self.manager
         DispatchQueue.global(qos: .userInitiated).async {
             handleClientConnection(
                 clientFd: serverFd,
-                manager: self.manager,
+                manager: manager,
                 maxRequestBytes: 32,
                 recvTimeout: timeval(tv_sec: 1, tv_usec: 0)
             )
@@ -254,21 +265,24 @@ final class RequestHandlerTests: XCTestCase {
 
         writeAll(Data(repeating: UInt8(ascii: "x"), count: 64), to: clientFd)
         let response = readLine(from: clientFd)
-        XCTAssertEqual(group.wait(timeout: .now() + 2), .success)
+        #expect(group.wait(timeout: .now() + 2) == .success)
 
-        XCTAssertEqual(response, "{\"ok\":false,\"error\":\"Request exceeds 32 bytes\"}\n")
+        let body = decodeResponse(response)
+        #expect(body["ok"] as? Bool == false)
+        #expect(body["error"] as? String == "Request exceeds 32 bytes")
     }
 
-    func testHandleClientConnectionRejectsTimedOutPartialRequestOverSocket() throws {
+    @Test func handleClientConnectionRejectsTimedOutPartialRequestOverSocket() throws {
         let (serverFd, clientFd) = try makeSocketPair()
         defer { close(clientFd) }
 
         let group = DispatchGroup()
         group.enter()
+        let manager = self.manager
         DispatchQueue.global(qos: .userInitiated).async {
             handleClientConnection(
                 clientFd: serverFd,
-                manager: self.manager,
+                manager: manager,
                 maxRequestBytes: 1024,
                 recvTimeout: timeval(tv_sec: 0, tv_usec: 100_000)
             )
@@ -277,8 +291,10 @@ final class RequestHandlerTests: XCTestCase {
 
         writeAll("{\"cmd\":\"ping\"".data(using: .utf8)!, to: clientFd)
         let response = readLine(from: clientFd)
-        XCTAssertEqual(group.wait(timeout: .now() + 2), .success)
+        #expect(group.wait(timeout: .now() + 2) == .success)
 
-        XCTAssertEqual(response, "{\"ok\":false,\"error\":\"Request receive timed out\"}\n")
+        let body = decodeResponse(response)
+        #expect(body["ok"] as? Bool == false)
+        #expect(body["error"] as? String == "Request receive timed out")
     }
 }

@@ -42,9 +42,11 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # First and cheapest: XCTest needs the full Xcode the runner already selects.
+      # First and cheapest. The wrapper is a plain `swift test` on a runner with
+      # full Xcode; it only adds search paths on a Command-Line-Tools-only
+      # machine, so the same command works for a developer running it locally.
       - name: Helper tests
-        run: swift test
+        run: ./scripts/test.sh
         working-directory: apps/helper-mac
 
       - uses: pnpm/action-setup@v5

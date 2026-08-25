@@ -27,7 +27,7 @@ export default function App() {
   // Both hooks live here so their IPC subscriptions and loads happen once, and
   // the two panels can never drift apart.
   const { session, startSession, stopSession } = useSession()
-  const { blocklists, selected, selectedId, setSelectedId, save } = useBlocklists()
+  const { blocklists, selectedId, setSelectedId, save } = useBlocklists()
   const [recovery, setRecovery] = useState<StaleSessionInfo | null>(null)
 
   useEffect(() => {
@@ -73,7 +73,10 @@ export default function App() {
         {tab === 'blocklist' && (
           <BlocklistPanel
             sessionActive={session?.status === 'active'}
-            selectedList={selected}
+            // The Focus tab's dropdown picks what to block, not what to edit.
+            // This panel has always edited the first list; sharing the
+            // selection would be a feature, not a restyle.
+            selectedList={blocklists[0] ?? null}
             save={save}
           />
         )}

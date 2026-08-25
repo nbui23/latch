@@ -58,8 +58,13 @@ If you already installed the desktop app, the packaged app bundle also includes 
 pnpm install
 pnpm typecheck
 pnpm test
+apps/helper-mac/scripts/test.sh   # Swift helper tests
 pnpm build:mac
 ```
+
+The Swift suites use swift-testing rather than XCTest, because XCTest ships only
+inside Xcode — `scripts/test.sh` is a plain `swift test` there, and adds the
+search paths a Command-Line-Tools-only machine needs.
 
 Useful commands:
 
@@ -114,7 +119,7 @@ On first launch, Latch prompts once to install the helper. The app bundle includ
 If you want to contribute:
 
 1. install dependencies with `pnpm install`
-2. run `pnpm typecheck && pnpm test && pnpm lint`
+2. run `pnpm typecheck && pnpm test && pnpm lint`, plus `apps/helper-mac/scripts/test.sh` if you touched the helper
 3. keep diffs small and macOS-focused
 4. verify `pnpm build:mac` before proposing release-affecting changes
 
