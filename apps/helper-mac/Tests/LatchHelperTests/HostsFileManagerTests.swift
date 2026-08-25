@@ -1,13 +1,15 @@
 import Foundation
-import XCTest
+import Testing
 @testable import LatchHelper
 
-final class HostsFileManagerTests: XCTestCase {
-    private var tempDirectoryURL: URL!
-    private var hostsURL: URL!
-    private var manager: HostsFileManager!
+/// A class suite, not a struct: swift-testing makes one instance per test, so
+/// `init`/`deinit` are the per-test fixture — and only a class can have a deinit.
+@Suite final class HostsFileManagerTests {
+    private let tempDirectoryURL: URL
+    private let hostsURL: URL
+    private let manager: HostsFileManager
 
-    override func setUpWithError() throws {
+    init() throws {
         tempDirectoryURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: tempDirectoryURL, withIntermediateDirectories: true)
@@ -19,30 +21,28 @@ final class HostsFileManagerTests: XCTestCase {
         manager = HostsFileManager(hostsURL: hostsURL)
     }
 
-    override func tearDownWithError() throws {
-        if let tempDirectoryURL {
-            try? FileManager.default.removeItem(at: tempDirectoryURL)
-        }
+    deinit {
+        try? FileManager.default.removeItem(at: tempDirectoryURL)
     }
 
-    func testWriteBlockReplacesExistingHostsFileAndPreservesPermissions() throws {
+    @Test func writeBlockReplacesExistingHostsFileAndPreservesPermissions() throws {
         let originalAttributes = try FileManager.default.attributesOfItem(atPath: hostsURL.path)
 
         try manager.writeBlock(domains: ["youtube.com"])
 
         let content = try String(contentsOf: hostsURL, encoding: .utf8)
-        XCTAssertTrue(content.contains(blockStart))
-        XCTAssertTrue(content.contains("127.0.0.1 youtube.com"))
-        XCTAssertTrue(content.contains("127.0.0.1 www.youtube.com"))
-        XCTAssertTrue(content.contains(blockEnd))
+        #expect(content.contains(blockStart))
+        #expect(content.contains("127.0.0.1 youtube.com"))
+        #expect(content.contains("127.0.0.1 www.youtube.com"))
+        #expect(content.contains(blockEnd))
 
         let updatedAttributes = try FileManager.default.attributesOfItem(atPath: hostsURL.path)
-        XCTAssertEqual(updatedAttributes[.posixPermissions] as? NSNumber, originalAttributes[.posixPermissions] as? NSNumber)
-        XCTAssertEqual(updatedAttributes[.ownerAccountID] as? NSNumber, originalAttributes[.ownerAccountID] as? NSNumber)
-        XCTAssertEqual(updatedAttributes[.groupOwnerAccountID] as? NSNumber, originalAttributes[.groupOwnerAccountID] as? NSNumber)
+        #expect(updatedAttributes[.posixPermissions] as? NSNumber == originalAttributes[.posixPermissions] as? NSNumber)
+        #expect(updatedAttributes[.ownerAccountID] as? NSNumber == originalAttributes[.ownerAccountID] as? NSNumber)
+        #expect(updatedAttributes[.groupOwnerAccountID] as? NSNumber == originalAttributes[.groupOwnerAccountID] as? NSNumber)
     }
 
-    func testRemoveBlockCleansUpMarkersAndPreservesPermissions() throws {
+    @Test func removeBlockCleansUpMarkersAndPreservesPermissions() throws {
         let startingContent = """
         127.0.0.1 localhost
 
@@ -59,11 +59,11 @@ final class HostsFileManagerTests: XCTestCase {
         try manager.removeBlock()
 
         let content = try String(contentsOf: hostsURL, encoding: .utf8)
-        XCTAssertEqual(content, "127.0.0.1 localhost\n")
+        #expect(content == "127.0.0.1 localhost\n")
 
         let updatedAttributes = try FileManager.default.attributesOfItem(atPath: hostsURL.path)
-        XCTAssertEqual(updatedAttributes[.posixPermissions] as? NSNumber, originalAttributes[.posixPermissions] as? NSNumber)
-        XCTAssertEqual(updatedAttributes[.ownerAccountID] as? NSNumber, originalAttributes[.ownerAccountID] as? NSNumber)
-        XCTAssertEqual(updatedAttributes[.groupOwnerAccountID] as? NSNumber, originalAttributes[.groupOwnerAccountID] as? NSNumber)
+        #expect(updatedAttributes[.posixPermissions] as? NSNumber == originalAttributes[.posixPermissions] as? NSNumber)
+        #expect(updatedAttributes[.ownerAccountID] as? NSNumber == originalAttributes[.ownerAccountID] as? NSNumber)
+        #expect(updatedAttributes[.groupOwnerAccountID] as? NSNumber == originalAttributes[.groupOwnerAccountID] as? NSNumber)
     }
 }

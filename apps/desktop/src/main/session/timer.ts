@@ -3,10 +3,18 @@
  * Immune to setInterval drift across sleep/wake cycles.
  */
 
+/**
+ * The wake happens at the deadline, but a timer is only as good as the clock
+ * behind it: macOS stops the monotonic clock during sleep, so a timer armed
+ * for an hour fires an hour of *awake* time later. Re-checking at most this
+ * often bounds how long a session can outlive its end after a wake.
+ */
+const MAX_DELAY_MS = 60_000
+
 export class SessionTimer {
   private startedAt: number
   private durationMs: number
-  private intervalId?: ReturnType<typeof setInterval>
+  private timeoutId?: ReturnType<typeof setTimeout>
 
   constructor(startedAt: number, durationMs: number) {
     this.startedAt = startedAt
@@ -21,26 +29,26 @@ export class SessionTimer {
     return this.getRemainingMs() === 0
   }
 
-  /** Polls once a second so a sleep/wake jump is noticed promptly; the poll
-   *  itself does nothing until the session actually runs out. */
+  /** Sleeps to the deadline rather than counting to it, re-reading the wall
+   *  clock on each wake so an early or late fire corrects itself. */
   start(onEnd: () => void): void {
-    if (this.isExpired()) {
-      onEnd()
-      return
-    }
-
-    this.intervalId = setInterval(() => {
-      if (this.getRemainingMs() === 0) {
+    const check = () => {
+      const remaining = this.getRemainingMs()
+      if (remaining === 0) {
         this.stop()
         onEnd()
+        return
       }
-    }, 1000)
+      this.timeoutId = setTimeout(check, Math.min(remaining, MAX_DELAY_MS))
+    }
+
+    check()
   }
 
   stop(): void {
-    if (this.intervalId) {
-      clearInterval(this.intervalId)
-      this.intervalId = undefined
+    if (this.timeoutId) {
+      clearTimeout(this.timeoutId)
+      this.timeoutId = undefined
     }
   }
 }

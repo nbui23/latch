@@ -286,6 +286,19 @@ describe('SessionManager', () => {
       expect(stateChanges[stateChanges.length - 1]).toBeNull()
     })
 
+    it('stops a session that ran out while the machine was asleep', async () => {
+      await manager.startSession({ blocklistId: 'list-1', durationMs: 60 * 60 * 1000 }, ['reddit.com'])
+
+      // macOS stops the monotonic clock during sleep, so timers do not advance
+      // with the wall clock. Jump the wall clock well past the deadline and give
+      // the timer a single minute of awake time to notice.
+      vi.setSystemTime(Date.now() + 3 * 60 * 60 * 1000)
+      await vi.advanceTimersByTimeAsync(60_000)
+
+      expect(mockRemoveBlock).toHaveBeenCalledTimes(1)
+      expect(manager.getSession()).toBeNull()
+    })
+
     it('stops at once when the countdown starts already expired', async () => {
       await manager.startSession({ blocklistId: 'list-1', durationMs: 0 }, ['reddit.com'])
       await vi.advanceTimersByTimeAsync(0)
