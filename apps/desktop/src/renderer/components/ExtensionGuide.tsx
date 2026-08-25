@@ -117,43 +117,28 @@ export default function ExtensionGuide() {
         onToggleDock={handleShowDockIconChange}
       />
 
-      <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 4, color: '#e5e5e5' }}>Browser Extension Setup</h2>
-      <p style={{ fontSize: 13, color: '#666666', marginBottom: 20 }}>
+      <h2 className="panel-title">Browser Extension Setup</h2>
+      <p className="panel-note panel-note--lead">
         Install the Latch extension to get instant redirect to the blocked page when a site is blocked.
         Without it, blocking still works — your browser just shows a connection error instead.
       </p>
 
       <ChromeInstructions />
 
-      <div style={{ marginTop: 28, borderTop: '1px solid #2c2c2c', paddingTop: 20 }}>
-        <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8, color: '#e5e5e5' }}>Uninstall Helper</h3>
-        <p style={{ fontSize: 13, color: '#666666', marginBottom: 12 }}>
+      <div className="guide-section">
+        <h3 className="guide-section__title">Uninstall Helper</h3>
+        <p className="panel-note panel-note--tight">
           Removes the one-time macOS helper and native messaging manifests after stopping any active focus session.
         </p>
         <button
+          className="btn btn--uninstall"
           onClick={() => { void handleUninstallHelper() }}
           disabled={uninstallState === 'running'}
-          style={{
-            padding: '9px 14px',
-            borderRadius: 6,
-            border: '1px solid #7f1d1d',
-            background: uninstallState === 'running' ? '#2a1515' : '#1a1a1a',
-            color: '#f87171',
-            cursor: uninstallState === 'running' ? 'wait' : 'pointer',
-            fontSize: 13,
-            fontWeight: 600,
-          }}
         >
           {uninstallState === 'running' ? 'Uninstalling…' : 'Uninstall Helper'}
         </button>
         {uninstallMessage && (
-          <p
-            style={{
-              marginTop: 10,
-              fontSize: 12,
-              color: uninstallState === 'error' ? '#f87171' : '#4ade80',
-            }}
-          >
+          <p className={`uninstall-status${uninstallState === 'error' ? ' is-error' : ''}`}>
             {uninstallMessage}
           </p>
         )}
@@ -180,118 +165,79 @@ function SettingsSection({
   const disabled = settingsState === 'loading' || settingsState === 'saving'
 
   return (
-    <div style={{ marginBottom: 28, padding: 16, borderRadius: 12, background: '#151515', border: '1px solid #2c2c2c' }}>
-      <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 6, color: '#e5e5e5' }}>App Settings</h2>
-      <p style={{ fontSize: 13, color: '#666666', marginBottom: 16 }}>
+    <div className="settings-card">
+      <h2 className="panel-title">App Settings</h2>
+      <p className="panel-note">
         Choose how Latch stays accessible when the main window is closed.
       </p>
 
-      <label
-        style={{
-          display: 'flex',
-          alignItems: 'flex-start',
-          gap: 12,
-          cursor: disabled ? 'wait' : 'pointer',
-        }}
-      >
+      <label className={`settings-row${disabled ? ' is-busy' : ''}`}>
         <input
+          className="settings-row__checkbox"
           type="checkbox"
           checked={showMenuBarIcon}
           disabled={disabled}
           onChange={(event) => { void onToggleMenuBar(event.target.checked) }}
-          style={{ marginTop: 2 }}
         />
         <span>
-          <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: '#e5e5e5' }}>
-            Show menu bar icon
-          </span>
-          <span style={{ display: 'block', marginTop: 3, fontSize: 12, color: '#888888', lineHeight: 1.5 }}>
+          <span className="settings-row__title">Show menu bar icon</span>
+          <span className="settings-row__hint">
             Keeps Latch accessible from the macOS menu bar. When disabled, Latch stays available from the Dock instead.
           </span>
         </span>
       </label>
 
       <label
-        style={{
-          display: 'flex',
-          alignItems: 'flex-start',
-          gap: 12,
-          marginTop: 14,
-          cursor: disabled || !showMenuBarIcon ? 'not-allowed' : 'pointer',
-          opacity: showMenuBarIcon ? 1 : 0.55,
-        }}
+        className={`settings-row settings-row--dock${disabled || !showMenuBarIcon ? ' is-locked' : ''}${showMenuBarIcon ? '' : ' is-faded'}`}
       >
         <input
+          className="settings-row__checkbox"
           type="checkbox"
           checked={showDockIconWhenMenuBarEnabled}
           disabled={disabled || !showMenuBarIcon}
           onChange={(event) => { void onToggleDock(event.target.checked) }}
-          style={{ marginTop: 2 }}
         />
         <span>
-          <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: '#e5e5e5' }}>
-            Keep Dock icon visible with menu bar icon
-          </span>
-          <span style={{ display: 'block', marginTop: 3, fontSize: 12, color: '#888888', lineHeight: 1.5 }}>
+          <span className="settings-row__title">Keep Dock icon visible with menu bar icon</span>
+          <span className="settings-row__hint">
             Useful if you want both a permanent Dock icon and menu bar access at the same time.
           </span>
         </span>
       </label>
 
-      {settingsState === 'saving' && (
-        <p style={{ marginTop: 10, fontSize: 12, color: '#888888' }}>Saving…</p>
-      )}
-      {settingsMessage && (
-        <p style={{ marginTop: 10, fontSize: 12, color: '#f87171' }}>
-          {settingsMessage}
-        </p>
-      )}
+      {settingsState === 'saving' && <p className="settings-status">Saving…</p>}
+      {settingsMessage && <p className="settings-status is-error">{settingsMessage}</p>}
     </div>
   )
 }
 
 function Step({ n, children }: { n: number; children: React.ReactNode }) {
   return (
-    <div style={{ display: 'flex', gap: 12, marginBottom: 14 }}>
-      <div style={{
-        flexShrink: 0, width: 28, height: 28, borderRadius: '50%',
-        background: '#1e2a3a', border: '1px solid #3b82f6', color: '#3b82f6',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 13, fontWeight: 700,
-      }}>
-        {n}
-      </div>
-      <div style={{ fontSize: 14, color: '#aaaaaa', paddingTop: 4 }}>{children}</div>
+    <div className="step">
+      <div className="step__number">{n}</div>
+      <div className="step__body">{children}</div>
     </div>
   )
 }
 
 function Code({ children }: { children: React.ReactNode }) {
-  return (
-    <code style={{
-      background: '#222222', padding: '1px 6px', borderRadius: 4,
-      fontSize: 12, fontFamily: 'monospace', color: '#e5e5e5',
-      border: '1px solid #2c2c2c',
-    }}>
-      {children}
-    </code>
-  )
+  return <code className="code">{children}</code>
 }
 
 function ChromeInstructions() {
   return (
     <div>
-      <div style={{ background: '#0f2318', border: '1px solid #166534', borderRadius: 8, padding: '12px 16px', marginBottom: 20, fontSize: 13, color: '#4ade80' }}>
+      <div className="callout callout--ok">
         Works in Chrome, Microsoft Edge, Brave, and any Chromium-based browser.
       </div>
       <Step n={1}>
         Open Chrome and navigate to <Code>chrome://extensions</Code>
       </Step>
       <Step n={2}>
-        Enable <strong style={{ color: '#e5e5e5' }}>Developer mode</strong> using the toggle in the top-right corner.
+        Enable <strong>Developer mode</strong> using the toggle in the top-right corner.
       </Step>
       <Step n={3}>
-        Click <strong style={{ color: '#e5e5e5' }}>Load unpacked</strong> and select the <Code>extensions/chrome</Code> folder
+        Click <strong>Load unpacked</strong> and select the <Code>extensions/chrome</Code> folder
         inside the Latch app bundle.
       </Step>
       <Step n={4}>
@@ -301,7 +247,7 @@ function ChromeInstructions() {
         Start a focus session and visit a blocked site — you should see the Latch blocked page
         instead of a connection error.
       </Step>
-      <div style={{ marginTop: 16, background: '#1f1a00', border: '1px solid #78350f', borderRadius: 6, padding: '10px 14px', fontSize: 12, color: '#fbbf24' }}>
+      <div className="guide-note">
         <strong>Note:</strong> You need to repeat step 3 for each Chromium browser you want to block in.
         {' '}If you previously loaded an older FreeTurkey or repo-local unpacked extension, remove it and reload from the bundled <Code>extensions/chrome</Code> folder—moved or deleted source folders break blocked-page redirects.
       </div>

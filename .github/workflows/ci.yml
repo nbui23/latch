@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches: [main, develop]
+    tags: ['v*']
   pull_request:
     branches: [main]
 
@@ -32,3 +33,49 @@ jobs:
 
       - name: Unit tests
         run: pnpm test --reporter=verbose
+
+  # macOS runners bill at 10x, so the parts that need a Mac — the Swift helper and the
+  # packaging path — run on main and release tags only, not on every PR.
+  macos-deep:
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref_type == 'tag')
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # First and cheapest: XCTest needs the full Xcode the runner already selects.
+      - name: Helper tests
+        run: swift test
+        working-directory: apps/helper-mac
+
+      - uses: pnpm/action-setup@v5
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      # generate-brand-assets.mjs rasterises the icons through PIL during build:mac.
+      - name: Install Pillow
+        run: pip install Pillow
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The boot smoke test skips itself unless dist/main/index.js exists, so build first.
+      - name: Build desktop bundle
+        run: pnpm --filter desktop build
+
+      - name: Unit tests
+        run: pnpm test --reporter=verbose
+
+      - name: Package macOS app
+        run: pnpm build:mac
+        env:
+          # No signing identity on CI, and hardenedRuntime would otherwise make it look.
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'

@@ -33,6 +33,15 @@ function getDesktopResourcePath(filename: string): string {
 
 export class TrayController {
   private tray: Tray | null = null
+  private session: Session | null = null
+  /**
+   * Visual state + status label, from the last render. Every other thing the
+   * tray shows — icon, menu-bar title, menu items, tooltip — is a function of
+   * those two, so an unchanged pair means the whole tray is unchanged and
+   * rebuilding the NSMenu would be pure churn.
+   */
+  private lastRenderKey: string | null = null
+  private labelTimer: ReturnType<typeof setInterval> | null = null
   private readonly images: Partial<Record<TrayVisualState, Electron.NativeImage>> = {}
 
   constructor(private readonly actions: TrayActions) {}
@@ -55,12 +64,50 @@ export class TrayController {
   }
 
   update(session: Session | null): void {
+    this.session = session
+    this.render()
+
+    // A running countdown is the only thing that changes the tray on its own,
+    // and only once a minute. Anything else moves when the session state does.
+    // No tray means nothing to refresh — arming the timer anyway is the leak
+    // this ticket exists to remove.
+    if (this.tray && session?.status === 'active' && !session.isIndefinite) {
+      if (!this.labelTimer) {
+        this.labelTimer = setInterval(() => this.render(), 60_000)
+      }
+    } else {
+      this.clearLabelTimer()
+    }
+  }
+
+  destroy(): void {
+    this.clearLabelTimer()
+    if (!this.tray) return
+    this.tray.removeAllListeners()
+    this.tray.destroy()
+    this.tray = null
+    this.lastRenderKey = null
+  }
+
+  private clearLabelTimer(): void {
+    if (!this.labelTimer) return
+    clearInterval(this.labelTimer)
+    this.labelTimer = null
+  }
+
+  private render(): void {
     const tray = this.tray
     if (!tray) return
 
+    const session = this.session
+    const visualState = getTrayVisualState(session)
     const statusLabel = getTrayStatusLabel(session)
-    const image = this.getImage(getTrayVisualState(session))
 
+    const key = `${visualState} ${statusLabel}`
+    if (key === this.lastRenderKey) return
+    this.lastRenderKey = key
+
+    const image = this.getImage(visualState)
     tray.setImage(image)
     tray.setTitle(getTrayMenuBarTitle(session))
     if (process.platform === 'darwin') {
@@ -76,13 +123,6 @@ export class TrayController {
       { label: 'Quit Latch', click: this.actions.quit },
     ]))
     tray.setToolTip(statusLabel)
-  }
-
-  destroy(): void {
-    if (!this.tray) return
-    this.tray.removeAllListeners()
-    this.tray.destroy()
-    this.tray = null
   }
 
   private buildSessionItems(session: Session | null): Electron.MenuItemConstructorOptions[] {

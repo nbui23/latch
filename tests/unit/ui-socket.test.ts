@@ -93,7 +93,7 @@ describe('ui socket', () => {
       if (msg.type === 'get_state') {
         return { type: 'no_session' }
       }
-      return { type: 'timer_state', payload: { remainingMs: 10, totalMs: 20, startedAt: 30 } }
+      return { type: 'session_state', payload: null }
     })
 
     await waitFor(() => fs.existsSync(getUISocketPath()))
@@ -179,12 +179,34 @@ describe('ui socket', () => {
     )
   })
 
+  it('answers a fresh subscriber with the current session as its first frame', async () => {
+    // Mirrors the handler in main/index.ts: subscribing means "state now, then
+    // every change", so a browser starting mid-session blocks without a poll.
+    const session = {
+      id: '550e8400-e29b-41d4-a716-446655440040',
+      blocklistId: '550e8400-e29b-41d4-a716-446655440041',
+      domains: ['news.ycombinator.com'],
+      startedAt: 1_700_000_000_000,
+      durationMs: 60_000,
+      isIndefinite: false,
+      status: 'active',
+    } as const
+
+    startUISocket(async () => ({ type: 'session_state', payload: session }))
+
+    await waitFor(() => fs.existsSync(getUISocketPath()))
+
+    const [first] = await connectAndCollect('{"type":"subscribe_state"}\n', 1)
+
+    expect(JSON.parse(first)).toEqual({ type: 'session_state', payload: session })
+  })
+
   it('processes multiple newline-delimited requests delivered in one chunk', async () => {
     startUISocket(async (msg) => {
       if (msg.type === 'get_state') {
         return { type: 'no_session' }
       }
-      return { type: 'timer_state', payload: { remainingMs: 1, totalMs: 2, startedAt: 3 } }
+      return { type: 'session_state', payload: null }
     })
 
     await waitFor(() => fs.existsSync(getUISocketPath()))
@@ -193,7 +215,7 @@ describe('ui socket', () => {
       connectAndCollect('{"type":"get_state"}\n{"type":"subscribe_state"}\n', 2),
     ).resolves.toEqual([
       '{"type":"no_session"}',
-      '{"type":"timer_state","payload":{"remainingMs":1,"totalMs":2,"startedAt":3}}',
+      '{"type":"session_state","payload":null}',
     ])
   })
 })

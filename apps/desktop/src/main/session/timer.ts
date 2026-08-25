@@ -7,8 +7,6 @@ export class SessionTimer {
   private startedAt: number
   private durationMs: number
   private intervalId?: ReturnType<typeof setInterval>
-  private onTick?: (remainingMs: number) => void
-  private onEnd?: () => void
 
   constructor(startedAt: number, durationMs: number) {
     this.startedAt = startedAt
@@ -23,19 +21,16 @@ export class SessionTimer {
     return this.getRemainingMs() === 0
   }
 
-  start(onTick: (remainingMs: number) => void, onEnd: () => void): void {
-    this.onTick = onTick
-    this.onEnd = onEnd
-
+  /** Polls once a second so a sleep/wake jump is noticed promptly; the poll
+   *  itself does nothing until the session actually runs out. */
+  start(onEnd: () => void): void {
     if (this.isExpired()) {
       onEnd()
       return
     }
 
     this.intervalId = setInterval(() => {
-      const remaining = this.getRemainingMs()
-      onTick(remaining)
-      if (remaining === 0) {
+      if (this.getRemainingMs() === 0) {
         this.stop()
         onEnd()
       }
@@ -46,14 +41,6 @@ export class SessionTimer {
     if (this.intervalId) {
       clearInterval(this.intervalId)
       this.intervalId = undefined
-    }
-  }
-
-  toJSON() {
-    return {
-      startedAt: this.startedAt,
-      durationMs: this.durationMs,
-      remainingMs: this.getRemainingMs(),
     }
   }
 }

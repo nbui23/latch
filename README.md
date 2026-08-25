@@ -71,12 +71,13 @@ pnpm build:mac
 
 ## Architecture
 
-Latch is a pnpm workspace of four packages:
+Latch is a pnpm workspace of five packages:
 
 | Package | Role |
 |---|---|
 | `packages/shared` | Zod schemas for every trust boundary; all cross-process types are inferred from them |
 | `apps/desktop` | Electron main process, preload bridge, and React renderer |
+| `apps/extension` | Chromium MV3 extension: declarativeNetRequest rules and the blocked page |
 | `apps/nm-host` | Native messaging proxy between Chromium and the desktop app |
 | `apps/helper-mac` | Privileged Swift LaunchDaemon that owns `/etc/hosts` |
 

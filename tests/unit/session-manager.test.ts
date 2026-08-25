@@ -3,7 +3,7 @@
  * The SessionManager has Electron + helper dependencies; we mock them all.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 // ─── Hoist mock fns so they are available inside vi.mock factories ──────────
 const {
@@ -252,6 +252,46 @@ describe('SessionManager', () => {
     it('isActive() returns true during active session', async () => {
       await manager.startSession({ blocklistId: 'list-1', durationMs: 60_000 }, ['reddit.com'])
       expect(manager.isActive()).toBe(true)
+    })
+  })
+
+  describe('countdown', () => {
+    beforeEach(() => {
+      vi.useFakeTimers()
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('publishes nothing while a timed session counts down', async () => {
+      await manager.startSession({ blocklistId: 'list-1', durationMs: 60_000 }, ['reddit.com'])
+      stateChanges.length = 0
+      mockWriteSessionAtomic.mockClear()
+
+      await vi.advanceTimersByTimeAsync(30_000)
+
+      expect(stateChanges).toEqual([])
+      expect(mockWriteSessionAtomic).not.toHaveBeenCalled()
+      expect(manager.isActive()).toBe(true)
+    })
+
+    it('stops the session when the duration runs out', async () => {
+      await manager.startSession({ blocklistId: 'list-1', durationMs: 60_000 }, ['reddit.com'])
+
+      await vi.advanceTimersByTimeAsync(60_000)
+
+      expect(mockRemoveBlock).toHaveBeenCalledTimes(1)
+      expect(manager.getSession()).toBeNull()
+      expect(stateChanges[stateChanges.length - 1]).toBeNull()
+    })
+
+    it('stops at once when the countdown starts already expired', async () => {
+      await manager.startSession({ blocklistId: 'list-1', durationMs: 0 }, ['reddit.com'])
+      await vi.advanceTimersByTimeAsync(0)
+
+      expect(mockRemoveBlock).toHaveBeenCalledTimes(1)
+      expect(manager.getSession()).toBeNull()
     })
   })
 })

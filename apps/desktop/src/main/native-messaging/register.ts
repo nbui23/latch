@@ -1,6 +1,10 @@
 /**
  * Native messaging host manifest registration.
  * macOS-only: called on first app launch to write the Chrome native messaging manifest.
+ *
+ * Chrome allows one manifest per host name, so a dev launch overwrites the packaged app's
+ * registration and vice versa - last launched wins. Accepted, because both branches below
+ * now resolve to a binary that exists on disk.
  */
 
 import * as fs from 'fs'
@@ -37,14 +41,15 @@ export interface ChromeNativeMessagingManifestStatus {
   expected: ChromeNativeMessagingManifest
 }
 
-function getNMHostBinaryPath(): string {
+export function getNMHostBinaryPath(dirname: string = __dirname): string {
   if (app?.isPackaged) {
     // P0-3: electron-builder copies the binary into nm-host/ subdirectory inside Resources.
     // Packaged layout: Contents/Resources/nm-host/latch-nm-host
     return path.join(process.resourcesPath, 'nm-host', 'latch-nm-host')
   }
-  // dev: point to compiled nm-host
-  return path.join(__dirname, '..', '..', '..', '..', 'nm-host', 'dist', 'latch-nm-host')
+  // dev: point to compiled nm-host. electron-vite bundles main to apps/desktop/dist/main,
+  // so three levels up is apps/.
+  return path.join(dirname, '..', '..', '..', 'nm-host', 'dist', 'latch-nm-host')
 }
 
 function getChromeNMPath(): string {

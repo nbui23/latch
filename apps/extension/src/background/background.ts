@@ -2,7 +2,6 @@
 // Primary: webNavigation.onErrorOccurred intercepts failed connections and redirects
 // Belt-and-suspenders: declarativeNetRequest dynamic rules block before connection (Chrome only)
 
-import type { NativeMessageToElectron } from '@latch/shared'
 import {
   EMPTY_SESSION_SNAPSHOT,
   buildBlockedUrlRegexFilter,
@@ -69,17 +68,6 @@ function ensureSessionSnapshot(): Promise<void> {
   return restoreSessionPromise
 }
 
-async function refreshSessionStateFromNativeHost(): Promise<void> {
-  if (typeof chrome.runtime.sendNativeMessage === 'undefined') return
-
-  try {
-    const response = await chrome.runtime.sendNativeMessage(NM_HOST_ID, { type: 'get_state' })
-    await handleNativeMessage(response)
-  } catch (err) {
-    console.warn('[Latch] Failed to refresh native session state:', err)
-  }
-}
-
 function buildTabBlockedPageUrl(originalUrl: string): string | null {
   if (isBlockedPageUrl(originalUrl)) return null
   const hostname = getBlockedHostname(originalUrl, session.blockedDomains)
@@ -89,14 +77,7 @@ function buildTabBlockedPageUrl(originalUrl: string): string | null {
 
 async function getBlockedPageUrlForNavigation(url: string): Promise<string | null> {
   await ensureSessionSnapshot()
-  let blockedUrl = buildTabBlockedPageUrl(url)
-
-  if (!blockedUrl && !session.sessionActive) {
-    await refreshSessionStateFromNativeHost()
-    blockedUrl = buildTabBlockedPageUrl(url)
-  }
-
-  return blockedUrl
+  return buildTabBlockedPageUrl(url)
 }
 
 async function redirectTabToBlockedPage(tabId: number, url: string): Promise<boolean> {
@@ -181,61 +162,54 @@ async function handleMainFrameNavigation(tabId: number, url: string): Promise<vo
 // ─── Native Messaging ────────────────────────────────────────────────────────
 
 let nmPort: chrome.runtime.Port | null = null
+let nmReconnectTimer: ReturnType<typeof setTimeout> | null = null
 let nmRetryCount = 0
-const NM_MAX_RETRIES = 3
 const NM_RETRY_BASE_MS = 1000
-const STATE_REFRESH_INTERVAL_MS = 1000
-let stateRefreshIntervalId: ReturnType<typeof setInterval> | null = null
+const NM_RETRY_MAX_MS = 60_000
 
-function stopStateRefreshLoop(): void {
-  if (stateRefreshIntervalId) {
-    clearInterval(stateRefreshIntervalId)
-    stateRefreshIntervalId = null
-  }
-}
-
-function startStateRefreshLoop(): void {
-  if (stateRefreshIntervalId) return
-  stateRefreshIntervalId = setInterval(() => {
-    sendNativeMessage({ type: 'get_state' })
-  }, STATE_REFRESH_INTERVAL_MS)
+/**
+ * Never stop retrying: nothing polls any more, so giving up would be a
+ * permanent blocking outage. Exactly one attempt may ever be pending —
+ * connectNative hands back a port even when the host fails to spawn, so a
+ * second caller arriving during that one-task window would start a rival
+ * reconnect chain, and the chains accumulate instead of replacing each other.
+ */
+function scheduleNMReconnect(): void {
+  if (nmReconnectTimer) return
+  const delay = Math.min(NM_RETRY_BASE_MS * Math.pow(2, nmRetryCount), NM_RETRY_MAX_MS)
+  nmRetryCount++
+  nmReconnectTimer = setTimeout(() => {
+    nmReconnectTimer = null
+    connectNativeHost()
+  }, delay)
 }
 
 function connectNativeHost(): void {
-  if (nmRetryCount >= NM_MAX_RETRIES) return
+  // One live port is the whole bridge: a second connectNative spawns a second
+  // nm-host process and orphans the first. A pending backoff counts as an
+  // attempt in flight — jumping ahead of it is what multiplies the spawns.
+  if (nmPort || nmReconnectTimer) return
   try {
     nmPort = chrome.runtime.connectNative(NM_HOST_ID)
-    nmRetryCount = 0
-    startStateRefreshLoop()
 
     nmPort.onMessage.addListener((msg: unknown) => {
+      // A message proves the host is really up, which a returned port does not
+      // — connectNative resolves even when the host fails to spawn.
+      nmRetryCount = 0
       void handleNativeMessage(msg)
     })
 
     nmPort.onDisconnect.addListener(() => {
       nmPort = null
-      stopStateRefreshLoop()
       const err = chrome.runtime.lastError
       if (err) {
         console.warn('[Latch] NM host disconnected:', err.message)
       }
-      const delay = NM_RETRY_BASE_MS * Math.pow(2, nmRetryCount)
-      nmRetryCount++
-      setTimeout(connectNativeHost, delay)
+      scheduleNMReconnect()
     })
-
-    sendNativeMessage({ type: 'get_state' })
   } catch (err) {
+    nmPort = null
     console.warn('[Latch] Failed to connect native host:', err)
-  }
-}
-
-function sendNativeMessage(msg: NativeMessageToElectron): void {
-  if (!nmPort) return
-  try {
-    nmPort.postMessage(msg)
-  } catch {
-    // Port may have been invalidated; reconnect will handle it
   }
 }
 
@@ -287,9 +261,6 @@ async function handleNativeMessage(msg: unknown): Promise<void> {
     return
   }
 
-  if (validated.type === 'timer_state') {
-    sendNativeMessage({ type: 'get_state' })
-  }
 }
 
 // ─── webNavigation.onErrorOccurred (primary) ─────────────────────────────────
@@ -336,7 +307,6 @@ chrome.tabs.onActivated.addListener(({ tabId }) => {
     const tab = await chrome.tabs.get(tabId)
     if (typeof tab.url !== 'string') return
     await handleMainFrameNavigation(tabId, tab.url)
-    void refreshSessionStateFromNativeHost()
   })().catch((err) => {
     console.warn('[Latch] Active-tab refresh handler failed:', err)
   })
@@ -348,7 +318,6 @@ if (typeof chrome.windows !== 'undefined') {
 
     void (async () => {
       await syncOpenBlockedTabs()
-      void refreshSessionStateFromNativeHost()
     })().catch((err) => {
       console.warn('[Latch] Window-focus refresh handler failed:', err)
     })
@@ -362,7 +331,6 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
 
   void (async () => {
     await ensureSessionSnapshot()
-    await refreshSessionStateFromNativeHost()
 
     if (!session.sessionActive) {
       sendResponse({ sessionActive: false })
@@ -427,12 +395,10 @@ async function updateDnrRules(): Promise<void> {
 if (typeof chrome.alarms !== 'undefined') {
   chrome.alarms.create('keepalive', { periodInMinutes: 0.1 })
   chrome.alarms.onAlarm.addListener((alarm) => {
-    if (alarm.name === 'keepalive') {
-      if (nmPort) {
-        sendNativeMessage({ type: 'get_state' })
-      } else {
-        void refreshSessionStateFromNativeHost()
-      }
+    // A wake, not a poll: nm-host pushes every state change, so the only useful
+    // thing a tick can do is notice a dead bridge and reconnect.
+    if (alarm.name === 'keepalive' && !nmPort) {
+      connectNativeHost()
     }
   })
 }

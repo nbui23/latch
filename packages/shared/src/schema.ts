@@ -39,12 +39,6 @@ export const SessionSchema = z.object({
   intent: SessionIntentSchema.optional(),
 })
 
-export const TimerStateSchema = z.object({
-  remainingMs: z.number(),
-  totalMs: z.number(),
-  startedAt: z.number(),
-})
-
 export const HelperCommandSchema = z.discriminatedUnion('cmd', [
   z.object({ cmd: z.literal('write_block'), domains: z.array(z.string()), sessionId: z.string() }),
   z.object({ cmd: z.literal('remove_block'), sessionId: z.string() }),
@@ -73,7 +67,6 @@ export const NativeMessageToElectronSchema = z.discriminatedUnion('type', [
 export const NativeMessageFromElectronSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('session_state'), payload: SessionSchema.nullable() }),
   z.object({ type: z.literal('no_session') }),
-  z.object({ type: z.literal('timer_state'), payload: TimerStateSchema }),
   // Emitted by the UI socket and the NM host proxy when an inbound message
   // cannot be understood. Part of the wire protocol, so receivers can tell a
   // reported failure apart from an unparseable payload.
