@@ -22,10 +22,15 @@ export function writeFileAtomicSync(
   const tmp = filePath + '.tmp'
 
   try {
-    const fd = options.mode === undefined
-      ? fs.openSync(tmp, 'w')
-      : fs.openSync(tmp, 'w', options.mode)
+    const fd = fs.openSync(tmp, 'w', options.mode)
     try {
+      if (options.mode !== undefined) {
+        // openSync applies `mode` only when it *creates* the file. A temp file
+        // left behind by an earlier crash keeps its old — possibly wider — mode
+        // straight through the rename, so narrow it explicitly. Guarded because
+        // chmod ignores umask: defaulting this would publish 0666.
+        fs.fchmodSync(fd, options.mode)
+      }
       fs.writeSync(fd, contents)
       fs.fsyncSync(fd) // flush data to disk before it becomes reachable
     } finally {
